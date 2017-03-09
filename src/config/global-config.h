@@ -90,6 +90,9 @@ typedef struct __Config {
     /* Global rule hash */
     OSHash *g_rules_hash;
 
+    /* MD5 DB support */
+    char *md5db;
+	
 #ifdef LIBGEOIP_ENABLED
     /* GeoIP support */
     u_int8_t loggeoip;

@@ -125,6 +125,9 @@ int Read_Global(XML_NODE node, void *configp, void *mailp)
     const char *xml_heloserver = "helo_server";
     const char *xml_mailmaxperhour = "email_maxperhour";
 
+    /* MD5 DB */
+    const char *xml_md5db = "md5db";
+	
 #ifdef LIBGEOIP_ENABLED
     const char *xml_geoip_db_path = "geoip_db_path";
     const char *xml_geoip6_db_path = "geoip6_db_path";
@@ -132,7 +135,7 @@ int Read_Global(XML_NODE node, void *configp, void *mailp)
 
     _Config *Config;
     MailConfig *Mail;
-
+	
     Config = (_Config *)configp;
     Mail = (MailConfig *)mailp;
 
@@ -537,6 +540,14 @@ int Read_Global(XML_NODE node, void *configp, void *mailp)
             }
         }
 #endif
+        /* MD5 DB */
+        else if(strcmp(node[i]->element, xml_md5db) == 0)
+        {
+	    if(Config)
+            {
+                os_strdup(node[i]->content, Config->md5db);
+            }
+        }
         else {
             merror(XML_INVELEM, __local_name, node[i]->element);
             return (OS_INVALID);

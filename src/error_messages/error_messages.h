@@ -298,4 +298,7 @@
 #define OS_AG_STARTED   "ossec: Agent started: '%s->%s'."
 #define OS_AG_DISCON    "ossec: Agent disconnected: '%s'."
 
+#define INVALID_IGNORE_MD5DB "%s(1277) ERROR: Cannot open MD5 database: '%s'."
+#define MD5_NOT_CHECKED	 "%s(1278) WARN: File with MD5 '%s' not processed."
+
 #endif /* _ERROR_MESSAGES__H */

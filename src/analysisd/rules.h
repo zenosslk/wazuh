@@ -15,6 +15,7 @@
 #include "shared.h"
 #include "active-response.h"
 #include "lists.h"
+#include "fields.h"
 
 /* Event context  - stored on a uint8 */
 #define SAME_USER           0x001 /* 1   */

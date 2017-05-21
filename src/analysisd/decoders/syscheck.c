@@ -22,18 +22,11 @@ static int SumCompare(const char *s1, const char *s2);
 /* Initialize the necessary information to process the syscheck information */
 void SyscheckInit()
 {
-    int i = 0;
-
-    sdb.db_err = 0;
-
-    for (; i <= MAX_AGENTS; i++) {
-        sdb.agent_ips[i] = NULL;
-        sdb.agent_fps[i] = NULL;
-        sdb.agent_cp[i][0] = '0';
+    if (sdb.agents = OSHash_Create(), !sdb.agents) {
+        ErrorExit(ARGV0 ": ERROR: at SyscheckInit(): at OSHash_Create()");
     }
 
     /* Clear db memory */
-    memset(sdb.buf, '\0', OS_MAXSTR + 1);
     memset(sdb.comment, '\0', OS_MAXSTR + 1);
 
     memset(sdb.size, '\0', OS_FLSIZE + 1);
@@ -70,20 +63,20 @@ void SyscheckInit()
     sdb.idn = getDecoderfromlist(SYSCHECK_NEW);
     sdb.idd = getDecoderfromlist(SYSCHECK_DEL);
 
+    sdb.index_limit = getDefine_Int("syscheck", "index_limit", 0, 1048576);
+
     debug1("%s: SyscheckInit completed.", ARGV0);
 }
-
-/* Check if the db is completed for that specific agent */
-#define DB_IsCompleted(x) (sdb.agent_cp[x][0] == '1')?1:0
 
 static void __setcompleted(const char *agent)
 {
     FILE *fp;
+    char buffer[OS_FLSIZE];
 
     /* Get agent file */
-    snprintf(sdb.buf, OS_FLSIZE , "%s/.%s.cpt", SYSCHECK_DIR, agent);
+    snprintf(buffer, OS_FLSIZE , "%s/.%s.cpt", SYSCHECK_DIR, agent);
 
-    fp = fopen(sdb.buf, "w");
+    fp = fopen(buffer, "w");
     if (fp) {
         fprintf(fp, "#!X");
         fclose(fp);
@@ -92,12 +85,13 @@ static void __setcompleted(const char *agent)
 
 static int __iscompleted(const char *agent)
 {
+    char buffer[OS_FLSIZE];
     FILE *fp;
 
     /* Get agent file */
-    snprintf(sdb.buf, OS_FLSIZE , "%s/.%s.cpt", SYSCHECK_DIR, agent);
+    snprintf(buffer, OS_FLSIZE , "%s/.%s.cpt", SYSCHECK_DIR, agent);
 
-    fp = fopen(sdb.buf, "r");
+    fp = fopen(buffer, "r");
     if (fp) {
         fclose(fp);
         return (1);
@@ -108,163 +102,262 @@ static int __iscompleted(const char *agent)
 /* Set the database of a specific agent as completed */
 static void DB_SetCompleted(const Eventinfo *lf)
 {
-    int i = 0;
+    sk_meta_t *agent;
 
-    /* Find file pointer */
-    while (sdb.agent_ips[i] != NULL &&  i < MAX_AGENTS) {
-        if (strcmp(sdb.agent_ips[i], lf->location) == 0) {
-            /* Return if already set as completed */
-            if (DB_IsCompleted(i)) {
-                return;
-            }
-
+    if (agent = OSHash_Get(sdb.agents, lf->location), agent) {
+        if (!agent->completed) {
             __setcompleted(lf->location);
-
             /* Set as completed in memory */
-            sdb.agent_cp[i][0] = '1';
-            return;
+            agent->completed = 1;
         }
-
-        i++;
     }
 }
 
+// Insert a new entry in the index. On error, deletes index and returns -1.
 
-/* Return the file pointer to be used to verify the integrity */
-static FILE *DB_File(const char *agent, int *agent_id)
-{
-    int i = 0;
+int DBIndex_Insert(sk_meta_t * agent, const char * name, const fpos_t *fpos) {
+    // Assert limit
 
-    /* Find file pointer */
-    while (sdb.agent_ips[i] != NULL  &&  i < MAX_AGENTS) {
-        if (strcmp(sdb.agent_ips[i], agent) == 0) {
-            /* Point to the beginning of the file */
-            fseek(sdb.agent_fps[i], 0, SEEK_SET);
-            *agent_id = i;
-            return (sdb.agent_fps[i]);
+    if (agent->entries_z >= sdb.index_limit) {
+        merror(ARGV0 ": ERROR: index is full and will be disabled.");
+        free(agent->fpos);
+        OSHash_Free(agent->entries);
+        agent->entries = NULL;
+        return -1;
+    }
+
+    // Copy position and store
+
+    agent->fpos[agent->entries_z] = *fpos;
+
+    switch (OSHash_Add(agent->entries, name, agent->fpos + agent->entries_z)) {
+    case 0:
+        merror(ARGV0 ": ERROR: at DB_Load(): at OS_Add(%s)", name);
+        return -1;
+
+    case 1:
+        merror(ARGV0 ": ERROR: at DB_Load(): duplicated '%s'", name);
+        return 0;
+    }
+
+    agent->entries_z++;
+    return 0;
+}
+
+// Load and index full agent Syscheck database. Leaves index null on error.
+void DBIndex_Load(sk_meta_t * agent, const char * location) {
+    fpos_t init_pos;
+    char buffer[OS_MAXSTR + 1];
+    char * name;
+    char * end;
+
+    os_calloc(sdb.index_limit, sizeof(fpos_t), agent->fpos);
+
+    if (agent->entries = OSHash_Create(), !agent->entries) {
+        merror(ARGV0 ": ERROR: at DB_Load(): at OS_Create()");
+        return;
+    }
+
+    // Loop over the file
+    while (fgetpos(agent->fp, &init_pos), fgets(buffer, OS_MAXSTR, agent->fp)) {
+
+        // Ignore blank lines and lines with a comment
+
+        if (buffer[0] == '\n' || buffer[0] == '#') {
+            continue;
         }
 
-        i++;
+        // Get name
+
+        if (name = strchr(buffer, ' '), !name) {
+            merror("%s: ERROR: Invalid integrity message in the database '%s'.", ARGV0, location);
+            continue;
+        }
+
+        // New format - with a timestamp
+
+        if (*(++name) == '!') {
+            if (name = strchr(name, ' '), !name) {
+                merror("%s: ERROR: Invalid integrity message in the database '%s'.", ARGV0, location);
+                continue;
+            }
+
+            name++;
+        }
+
+        // Remove newline
+
+        if (end = strchr(name, '\n'), end) {
+            *end = '\0';
+        }
+
+        if (DBIndex_Insert(agent, name, &init_pos) < 0) {
+            merror(ARGV0 ": ERROR: loading index for agent '%s'", location);
+            return;
+        }
     }
 
-    /* If here, our agent wasn't found */
-    if (i == MAX_AGENTS) {
-        merror("%s: Unable to open integrity file. Increase MAX_AGENTS.", ARGV0);
-        return (NULL);
+    fseek(agent->fp, 0, SEEK_SET);
+    debug2(ARGV0 ": DEBUG: DBIndex_Load() for agent '%s'> %zd entries loaded.", location, agent->entries_z);
+}
+
+/* Return the metadata pointer to be used to verify the integrity */
+static sk_meta_t * DB_File(const char * location)
+{
+    char buffer[OS_FLSIZE];
+    sk_meta_t * agent;
+
+    // Find agent
+
+    if (agent = OSHash_Get(sdb.agents, location), agent) {
+        /* Point to the beginning of the file */
+        fseek(agent->fp, 0, SEEK_SET);
+        return agent;
     }
 
-    os_strdup(agent, sdb.agent_ips[i]);
+    // If here, our agent wasn't found
+
+    os_calloc(1, sizeof(sk_meta_t), agent);
 
     /* Get agent file */
-    snprintf(sdb.buf, OS_FLSIZE , "%s/%s", SYSCHECK_DIR, agent);
+    snprintf(buffer, OS_FLSIZE, "%s/%s", SYSCHECK_DIR, location);
 
     /* r+ to read and write. Do not truncate */
-    sdb.agent_fps[i] = fopen(sdb.buf, "r+");
-    if (!sdb.agent_fps[i]) {
+    if (agent->fp = fopen(buffer, "r+"), !agent->fp) {
         /* Try opening with a w flag, file probably does not exist */
-        sdb.agent_fps[i] = fopen(sdb.buf, "w");
-        if (sdb.agent_fps[i]) {
-            fclose(sdb.agent_fps[i]);
-            sdb.agent_fps[i] = fopen(sdb.buf, "r+");
+        if (agent->fp = fopen(buffer, "w"), agent->fp) {
+            fclose(agent->fp);
+            agent->fp = fopen(buffer, "r+");
         }
     }
 
     /* Check again */
-    if (!sdb.agent_fps[i]) {
-        merror("%s: Unable to open '%s'", ARGV0, sdb.buf);
+    if (!agent->fp) {
+        merror("%s: Unable to open '%s'", ARGV0, buffer);
+        return NULL;
+    }
 
-        free(sdb.agent_ips[i]);
-        sdb.agent_ips[i] = NULL;
-        return (NULL);
+    if (OSHash_Add(sdb.agents, location, agent) != 2) {
+        merror(ARGV0 ": ERROR: at DB_File(): at OSHash_Add(%s)", location);
+
+        if (agent->entries) {
+            OSHash_Free(agent->entries);
+        }
+
+        fclose(agent->fp);
+        free(agent);
+        return NULL;
     }
 
     /* Return the opened pointer (the beginning of it) */
-    fseek(sdb.agent_fps[i], 0, SEEK_SET);
-    *agent_id = i;
+    fseek(agent->fp, 0, SEEK_SET);
 
-    /* Check if the agent was completed */
-    if (__iscompleted(agent)) {
-        sdb.agent_cp[i][0] = '1';
+    if (sdb.index_limit) {
+        DBIndex_Load(agent, location);
     }
 
-    return (sdb.agent_fps[i]);
+    /* Check if the agent was completed */
+    if (__iscompleted(location)) {
+        agent->completed = 1;
+    }
+
+    return agent;
 }
 
 /* Search the DB for any entry related to the file being received */
 static int DB_Search(const char *f_name, char *c_sum, Eventinfo *lf)
 {
     int p = 0;
-    size_t sn_size;
-    int agent_id;
 
-    char *saved_sum;
+    char buffer[OS_MAXSTR + 1] = "";
+    char *saved_sum = NULL;
     char *saved_name;
+    char *end;
 
-    FILE *fp;
-
+    sk_meta_t * agent;
     sk_sum_t oldsum;
     sk_sum_t newsum;
+    fpos_t init_pos;
+    fpos_t * _init_pos = NULL;
 
-    /* Get db pointer */
-    fp = DB_File(lf->location, &agent_id);
-    if (!fp) {
-        merror("%s: Error handling integrity database.", ARGV0);
-        sdb.db_err++;
+    // Get metadata pointer
+
+    if (agent = DB_File(lf->location), !agent) {
+        merror("%s: ERROR: handling integrity database.", ARGV0);
         lf->data = NULL;
         return (0);
     }
 
-    /* Read the integrity file and search for a possible entry */
-    if (fgetpos(fp, &sdb.init_pos) == -1) {
-        merror("%s: Error handling integrity database (fgetpos).", ARGV0);
-        return (0);
-    }
+    // If index is available, use it to find entry
 
-    /* Loop over the file */
-    while (fgets(sdb.buf, OS_MAXSTR, fp) != NULL) {
-        /* Ignore blank lines and lines with a comment */
-        if (sdb.buf[0] == '\n' || sdb.buf[0] == '#') {
-            fgetpos(fp, &sdb.init_pos); /* Get next location */
-            continue;
+    if (agent->entries) {
+        if (_init_pos = (fpos_t *)OSHash_Get(agent->entries, f_name), _init_pos) {
+            if (fsetpos(agent->fp, _init_pos)) {
+                merror("%s: ERROR: handling integrity database '%s' (fsetpos).", ARGV0, lf->location);
+                return 0;
+            }
+
+            if (saved_sum = fgets(buffer, OS_MAXSTR, agent->fp), !saved_sum) {
+                merror("%s: ERROR: handling integrity database '%s' (fgets).", ARGV0, lf->location);
+                return 0;
+            }
+        }
+    } else {
+        debug2(ARGV0 ": DEBUG: DB_Search() using legacy search (no index)");
+        _init_pos = &init_pos;
+
+        if (fgetpos(agent->fp, _init_pos) < 0) {
+            merror("%s: ERROR: handling integrity database (fgetpos).", ARGV0);
+            return (0);
         }
 
-        /* Get name */
-        saved_name = strchr(sdb.buf, ' ');
-        if (saved_name == NULL) {
-            merror("%s: Invalid integrity message in the database.", ARGV0);
-            fgetpos(fp, &sdb.init_pos); /* Get next location */
-            continue;
-        }
-        *saved_name = '\0';
-        saved_name++;
+        // Loop over the file
 
-        /* New format - with a timestamp */
-        if (*saved_name == '!') {
-            saved_name = strchr(saved_name, ' ');
-            if (saved_name == NULL) {
-                merror("%s: Invalid integrity message in the database", ARGV0);
-                fgetpos(fp, &sdb.init_pos); /* Get next location */
+        while (saved_sum = fgets(buffer, OS_MAXSTR, agent->fp), saved_sum) {
+            /* Ignore blank lines and lines with a comment */
+            if (buffer[0] == '\n' || buffer[0] == '#') {
+                fgetpos(agent->fp, _init_pos); /* Get next location */
                 continue;
             }
+
+            /* Get name */
+            saved_name = strchr(buffer, ' ');
+            if (saved_name == NULL) {
+                merror("%s: Invalid integrity message in the database.", ARGV0);
+                fgetpos(agent->fp, _init_pos); /* Get next location */
+                continue;
+            }
+            *saved_name = '\0';
             saved_name++;
+
+            /* New format - with a timestamp */
+            if (*saved_name == '!') {
+                saved_name = strchr(saved_name, ' ');
+                if (saved_name == NULL) {
+                    merror("%s: Invalid integrity message in the database", ARGV0);
+                    fgetpos(agent->fp, _init_pos); /* Get next location */
+                    continue;
+                }
+                saved_name++;
+            }
+
+            /* Remove newline from saved_name */
+            if (end = strchr(saved_name, '\n'), end) {
+                *end = '\0';
+            }
+
+            /* If name is different, go to next one */
+            if (strcmp(f_name, saved_name) != 0) {
+                /* Save current location */
+                fgetpos(agent->fp, _init_pos);
+                continue;
+            }
         }
+    }
 
-        /* Remove newline from saved_name */
-        sn_size = strlen(saved_name);
-        sn_size -= 1;
-        if (saved_name[sn_size] == '\n') {
-            saved_name[sn_size] = '\0';
-        }
+    // If the file was found, compare
 
-        /* If name is different, go to next one */
-        if (strcmp(f_name, saved_name) != 0) {
-            /* Save current location */
-            fgetpos(fp, &sdb.init_pos);
-            continue;
-        }
-
-        saved_sum = sdb.buf;
-
+    if (saved_sum) {
         /* First three bytes are for frequency check */
         saved_sum += 3;
 
@@ -273,8 +366,6 @@ static int DB_Search(const char *f_name, char *c_sum, Eventinfo *lf)
             lf->data = NULL;
             return (0);
         }
-
-        debug2("Agent: %d, location: <%s>, file: <%s>, sum: <%s>, saved: <%s>", agent_id, lf->location, f_name, c_sum, saved_sum);
 
         /* If we reached here, the checksum of the file has changed */
         if (saved_sum[-3] == '!') {
@@ -315,22 +406,30 @@ static int DB_Search(const char *f_name, char *c_sum, Eventinfo *lf)
 
         /* Add new checksum to the database */
         /* Commenting the file entry and adding a new one later */
-        if (fsetpos(fp, &sdb.init_pos)) {
-            merror("%s: Error handling integrity database (fsetpos).", ARGV0);
+        if (fsetpos(agent->fp, _init_pos)) {
+            merror("%s: ERROR: handling integrity database (fsetpos).", ARGV0);
             return (0);
         }
-        fputc('#', fp);
+        fputc('#', agent->fp);
 
         /* Add the new entry at the end of the file */
-        fseek(fp, 0, SEEK_END);
-        fprintf(fp, "%c%c%c%s !%ld %s\n",
+        fseek(agent->fp, 0, SEEK_END);
+
+        // If index is available, store
+
+        if (_init_pos != &init_pos && fgetpos(agent->fp, _init_pos) < 0) {
+            merror("%s: ERROR: handling integrity database (fgetpos).", ARGV0);
+            return (0);
+        }
+
+        fprintf(agent->fp, "%c%c%c%s !%ld %s\n",
                 '!',
                 p >= 1 ? '!' : '+',
                 p == 2 ? '!' : (p > 2) ? '?' : '+',
                 c_sum,
                 (long int)lf->time,
                 f_name);
-        fflush(fp);
+        fflush(agent->fp);
 
         switch (sk_decode_sum(&newsum, c_sum)) {
         case -1:
@@ -506,51 +605,65 @@ static int DB_Search(const char *f_name, char *c_sum, Eventinfo *lf)
         lf->decoder_info = sdb.syscheck_dec;
 
         return (1);
+    } else {
+        // If we reach here, this file is not present in our database
 
-    } /* Continue */
+        fseek(agent->fp, 0, SEEK_END);
 
-    /* If we reach here, this file is not present in our database */
-    fseek(fp, 0, SEEK_END);
-    fprintf(fp, "+++%s !%ld %s\n", c_sum, (long int)lf->time, f_name);
-    fflush(fp);
+        // If index is available, store
 
-    /* Insert row in SQLite DB*/
+        if (_init_pos != &init_pos) {
 
-    switch (sk_decode_sum(&newsum, c_sum)) {
-        case -1:
-            merror("%s: ERROR: Couldn't decode syscheck sum from log.", ARGV0);
-            break;
-
-        case 0:
-            lf->event_type = FIM_ADDED;
-
-            /* Alert if configured to notify on new files */
-            if ((Config.syscheck_alert_new == 1) && DB_IsCompleted(agent_id)) {
-                sdb.syscheck_dec->id = sdb.idn;
-                sk_fill_event(lf, f_name, &newsum);
-
-                /* New file message */
-                snprintf(sdb.comment, OS_MAXSTR,
-                         "New file '%.756s' "
-                         "added to the file system.", f_name);
-
-                /* Create a new log message */
-                free(lf->full_log);
-                os_strdup(sdb.comment, lf->full_log);
-                lf->log = lf->full_log;
-
-                /* Set decoder */
-                lf->decoder_info = sdb.syscheck_dec;
-                lf->data = NULL;
-
-                return (1);
+            if (fgetpos(agent->fp, &init_pos) < 0) {
+                merror("%s: ERROR: handling integrity database (fgetpos).", ARGV0);
+                return (0);
             }
 
-            break;
+            if (DBIndex_Insert(agent, f_name, &init_pos) < 0) {
+                merror(ARGV0 ": ERROR: inserting entry into index for agent '%s'", lf->location);
+                return 0;
+            }
+        }
 
-        case 1:
-            merror("%s: WARN: Missing file entry.", ARGV0);
-            break;
+        fprintf(agent->fp, "+++%s !%ld %s\n", c_sum, (long int)lf->time, f_name);
+        fflush(agent->fp);
+
+        switch (sk_decode_sum(&newsum, c_sum)) {
+            case -1:
+                merror("%s: ERROR: Couldn't decode syscheck sum from log.", ARGV0);
+                break;
+
+            case 0:
+                lf->event_type = FIM_ADDED;
+
+                /* Alert if configured to notify on new files */
+                if ((Config.syscheck_alert_new == 1) && agent->completed) {
+                    sdb.syscheck_dec->id = sdb.idn;
+                    sk_fill_event(lf, f_name, &newsum);
+
+                    /* New file message */
+                    snprintf(sdb.comment, OS_MAXSTR,
+                             "New file '%.756s' "
+                             "added to the file system.", f_name);
+
+                    /* Create a new log message */
+                    free(lf->full_log);
+                    os_strdup(sdb.comment, lf->full_log);
+                    lf->log = lf->full_log;
+
+                    /* Set decoder */
+                    lf->decoder_info = sdb.syscheck_dec;
+                    lf->data = NULL;
+
+                    return (1);
+                }
+
+                break;
+
+            case 1:
+                merror("%s: WARN: Missing file entry.", ARGV0);
+                break;
+        }
     }
 
     lf->data = NULL;

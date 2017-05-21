@@ -26,8 +26,18 @@
 #define SK_INODE   9
 #define SK_NFIELDS 10
 
+// Syscheck agent metadata
+
+typedef struct sk_meta_t {
+    int completed;
+    FILE *fp;
+    fpos_t *fpos;
+    // File entries (positions) indexed by file name
+    OSHash *entries;
+    size_t entries_z;
+} sk_meta_t;
+
 typedef struct __sdb {
-    char buf[OS_MAXSTR + 1];
     char comment[OS_MAXSTR + 1];
 
     char size[OS_FLSIZE + 1];
@@ -39,11 +49,8 @@ typedef struct __sdb {
     char mtime[OS_FLSIZE + 1];
     char inode[OS_FLSIZE + 1];
 
-    char agent_cp[MAX_AGENTS + 1][1];
-    char *agent_ips[MAX_AGENTS + 1];
-    FILE *agent_fps[MAX_AGENTS + 1];
-
-    int db_err;
+    // Dictionary of sk_meta_t, indexed by location
+    OSHash *agents;
 
     /* Ids for decoder */
     int id1;
@@ -55,8 +62,8 @@ typedef struct __sdb {
     /* Syscheck rule */
     OSDecoderInfo  *syscheck_dec;
 
-    /* File search variables */
-    fpos_t init_pos;
+    // Maximum indexed entries limit
+    size_t index_limit;
 
 } _sdb; /* syscheck db information */
 

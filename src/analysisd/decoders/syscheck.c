@@ -563,8 +563,10 @@ static int DB_Search(const char *f_name, char *c_sum, Eventinfo *lf)
  */
 int DecodeSyscheck(Eventinfo *lf)
 {
+    int result;
     char *c_sum;
     char *f_name;
+    clock_t t0 = clock();
 
     /* Every syscheck message must be in the following format:
      * checksum filename
@@ -614,7 +616,9 @@ int DecodeSyscheck(Eventinfo *lf)
     c_sum = lf->log;
 
     /* Search for file changes */
-    return (DB_Search(f_name, c_sum, lf));
+    result = DB_Search(f_name, c_sum, lf);
+    debug2(ARGV0 ": PROFILE: DecodeSyscheck() for '%s', %d µs", lf->location, (int)((double)(clock() - t0) * 1000000 / CLOCKS_PER_SEC));
+    return result;
 }
 
 /* Compare the first common fields between sum strings */

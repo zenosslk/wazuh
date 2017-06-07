@@ -15,22 +15,40 @@
 /* Read configuration */
 SyslogConfig **OS_ReadSyslogConf(__attribute__((unused)) int test_config, const char *cfgfile)
 {
-    int modules = 0;
     struct SyslogConfig_holder config;
     SyslogConfig **syslog_config = NULL;
+    int i;
+    OS_XML xml;
+    XML_NODE node, chld_node;
 
     /* Modules for the configuration */
-    modules |= CSYSLOGD;
     config.data = syslog_config;
 
     /* Read configuration */
-    if (ReadConfig(modules, cfgfile, &config, NULL) < 0) {
-        ErrorExit(CONFIG_ERROR, ARGV0, cfgfile);
+    // Read syslog.xml
+    debug2("%s: Reading Configuration [%s]", ARGV0, cfgfile);
+    if (OS_ReadXML(cfgfile, &xml) < 0) {
+        merror(XML_ERROR, ARGV0, cfgfile, xml.err, xml.err_line);
         return (NULL);
     }
+    node = OS_GetElementsbyNode(&xml, NULL);
+    if (!node) {
+        return (NULL);
+    }
+
+    i = 0;
+    while (node[i]) {
+        if (strcmp(node[i]->element, "syslog_output") == 0) {
+            chld_node = OS_GetElementsbyNode(&xml, node[i]);
+            Read_CSyslog(chld_node, &config, NULL);
+            OS_ClearNode(chld_node);
+        }
+        i++;
+    }
+    OS_ClearNode(node);
+    OS_ClearXML(&xml);
 
     syslog_config = config.data;
 
     return (syslog_config);
 }
-

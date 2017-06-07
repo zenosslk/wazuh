@@ -59,4 +59,6 @@ int Read_WModule(const OS_XML *xml, xml_node *node, void *d1, void *d2);
 int Read_Labels(XML_NODE node, void *d1, void *d2);
 int Read_Authd(XML_NODE node, void *d1, void *d2);
 
+int ValidAgent(xml_node *node);
+
 #endif /* _HCONFIG__H */

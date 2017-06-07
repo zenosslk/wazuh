@@ -19,8 +19,8 @@ int ExecdConfig(const char *cfgfile)
 #else
     int is_disabled = 0;
 #endif
-    const char *(xmlf[]) = {"ossec_config", "active-response", "disabled", NULL};
-    const char *(blocks[]) = {"ossec_config", "active-response", "repeated_offenders", NULL};
+    const char *(xmlf[]) = {"active-response", "disabled", NULL};
+    const char *(blocks[]) = {"active-response", "repeated_offenders", NULL};
     char *disable_entry;
     char *repeated_t;
     char **repeated_a;
@@ -28,6 +28,7 @@ int ExecdConfig(const char *cfgfile)
     OS_XML xml;
 
     /* Read XML file */
+    debug2("%s: Reading Configuration [%s]", ARGV0, cfgfile);
     if (OS_ReadXML(cfgfile, &xml) < 0) {
         ErrorExit(XML_ERROR, ARGV0, cfgfile, xml.err, xml.err_line);
     }
@@ -90,4 +91,3 @@ int ExecdConfig(const char *cfgfile)
 
     return (is_disabled);
 }
-

@@ -41,7 +41,7 @@ static void help_execd()
     print_out("    -t          Test configuration");
     print_out("    -f          Run in foreground");
     print_out("    -g <group>  Group to run as (default: %s)", GROUPGLOBAL);
-    print_out("    -c <config> Configuration file to use (default: %s)", DEFAULTCPATH);
+    print_out("    -c <config> Configuration file to use (default: %s)", DEFAULT_AR_CONF);
     print_out(" ");
     exit(1);
 }
@@ -76,7 +76,7 @@ int main(int argc, char **argv)
     int m_queue = 0;
 
     const char *group = GROUPGLOBAL;
-    const char *cfg = DEFAULTCPATH;
+    const char *cfg = DEFAULT_AR_CONF;
 
     /* Set the name */
     OS_SetName(ARGV0);

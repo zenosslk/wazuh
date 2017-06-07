@@ -14,13 +14,16 @@
 #include "os_regex/os_regex.h"
 #include "analysisd.h"
 #include "config.h"
+#include "active-response.h"
 
 long int __crt_ftell; /* Global ftell pointer */
 _Config Config;       /* Global Config structure */
 
 int GlobalConf(const char *cfgfile)
 {
-    int modules = 0;
+    int i;
+    OS_XML xml;
+    XML_NODE node, chld_node;
 
     /* Default values */
     Config.logall = 0;
@@ -63,15 +66,79 @@ int GlobalConf(const char *cfgfile)
 
     os_calloc(1, sizeof(wlabel_t), Config.labels);
 
-    modules |= CGLOBAL;
-    modules |= CRULES;
-    modules |= CALERTS;
-
-    /* Read config */
-    if (ReadConfig(modules, cfgfile, &Config, NULL) < 0 ||
-        ReadConfig(CLABELS, cfgfile, &Config.labels, NULL) < 0) {
+    // Read analisysd.xml: <global>, <alert>, <ruleset>, <command>, <syscheck>
+    debug2("%s: Reading Configuration [%s]", ARGV0, cfgfile);
+    if (OS_ReadXML(cfgfile, &xml) < 0) {
+        merror(XML_ERROR, ARGV0, cfgfile, xml.err, xml.err_line);
         return (OS_INVALID);
     }
+    node = OS_GetElementsbyNode(&xml, NULL);
+    if (!node) {
+        return (-1);
+    }
+
+    i = 0;
+    while (node[i]) {
+        if (strcmp(node[i]->element, "global") == 0) {
+            chld_node = OS_GetElementsbyNode(&xml, node[i]);
+            if (chld_node = OS_GetElementsbyNode(&xml, node[i]), chld_node) {
+                Read_Global(chld_node, &Config, NULL);
+                OS_ClearNode(chld_node);
+            }
+        } else if (strcmp(node[i]->element, "ruleset") == 0) {
+            chld_node = OS_GetElementsbyNode(&xml, node[i]);
+            if (chld_node = OS_GetElementsbyNode(&xml, node[i]), chld_node) {
+                Read_Rules(chld_node, &Config, NULL);
+                OS_ClearNode(chld_node);
+            }
+        } else if (strcmp(node[i]->element, "alerts") == 0) {
+            chld_node = OS_GetElementsbyNode(&xml, node[i]);
+            if (chld_node = OS_GetElementsbyNode(&xml, node[i]), chld_node) {
+                Read_Alerts(chld_node, &Config, NULL);
+                OS_ClearNode(chld_node);
+            }
+        } else if (strcmp(node[i]->element, "syscheck") == 0) {
+            chld_node = OS_GetElementsbyNode(&xml, node[i]);
+            if (chld_node = OS_GetElementsbyNode(&xml, node[i]), chld_node) {
+                Read_GlobalSK(chld_node, &Config, NULL);
+                OS_ClearNode(chld_node);
+            }
+        } else if (strcmp(node[i]->element, "command") == 0) {
+            chld_node = OS_GetElementsbyNode(&xml, node[i]);
+            if (chld_node = OS_GetElementsbyNode(&xml, node[i]), chld_node) {
+                ReadActiveCommands(chld_node, ar_commands, NULL);
+                OS_ClearNode(chld_node);
+            }
+        }
+        i++;
+    }
+    OS_ClearNode(node);
+    OS_ClearXML(&xml);
+
+    // Read labels.xml
+    debug2("%s: Reading Configuration [%s]", ARGV0, DEFAULT_LABELS_CONF);
+    if (OS_ReadXML(DEFAULT_LABELS_CONF, &xml) < 0) {
+        merror(XML_ERROR, ARGV0, DEFAULT_LABELS_CONF, xml.err, xml.err_line);
+        return (OS_INVALID);
+    }
+    node = OS_GetElementsbyNode(&xml, NULL);
+    if (!node) {
+        return (-1);
+    }
+
+    i = 0;
+    while (node[i]) {
+        if (strcmp(node[i]->element, "labels") == 0) {
+            chld_node = OS_GetElementsbyNode(&xml, node[i]);
+            if (chld_node = OS_GetElementsbyNode(&xml, node[i]), chld_node) {
+                Read_Labels(chld_node, &Config.labels, NULL);
+                OS_ClearNode(chld_node);
+            }
+        }
+        i++;
+    }
+    OS_ClearNode(node);
+    OS_ClearXML(&xml);
 
     /* Minimum memory size */
     if (Config.memorysize < 2048) {

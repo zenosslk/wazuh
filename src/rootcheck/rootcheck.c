@@ -58,7 +58,7 @@ int main(int argc, char **argv)
 
 int rootcheck_init(int test_config)
 {
-    const char *cfg = DEFAULTCPATH;
+    const char *cfg = DEFAULT_ROOTCHECK_CONF;
 
 #endif /* OSSECHIDS */
 
@@ -247,4 +247,3 @@ int rootcheck_init(int test_config)
 #endif /* OSSECHIDS */
     return (0);
 }
-

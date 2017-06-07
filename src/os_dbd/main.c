@@ -9,6 +9,7 @@
 
 #include "shared.h"
 #include "dbd.h"
+#include "config/config.h"
 
 #ifndef ARGV0
 #define ARGV0 "ossec-dbd"
@@ -49,7 +50,7 @@ static void help_dbd()
     print_out("    -f          Run in foreground");
     print_out("    -u <user>   User to run as (default: %s)", MAILUSER);
     print_out("    -g <group>  Group to run as (default: %s)", GROUPGLOBAL);
-    print_out("    -c <config> Configuration file to use (default: %s)", DEFAULTCPATH);
+    print_out("    -c <config> Configuration file to use (default: %s)", DEFAULT_DBD_CONF);
     print_out("    -D <dir>    Directory to chroot into (default: %s)", DEFAULTDIR);
     print_out(" ");
     print_out("  Database Support:");
@@ -64,12 +65,15 @@ int main(int argc, char **argv)
     uid_t uid;
     gid_t gid;
     unsigned int d;
+    int i;
+    OS_XML xml;
+    XML_NODE node, chld_node;
 
     /* Use MAILUSER (read only) */
     const char *dir  = DEFAULTDIR;
     const char *user = MAILUSER;
     const char *group = GROUPGLOBAL;
-    const char *cfg = DEFAULTCPATH;
+    const char *cfg = DEFAULT_DBD_CONF;
 
     /* Database Structure */
     DBConfig db_config;
@@ -136,9 +140,27 @@ int main(int argc, char **argv)
     }
 
     /* Read configuration */
-    if ((c = OS_ReadDBConf(test_config, cfg, &db_config)) < 0) {
+    // Read dbd.xml
+    debug2("%s: Reading Configuration [%s]", ARGV0, cfg);
+    if (OS_ReadXML(cfg, &xml) < 0) {
+        merror(XML_ERROR, ARGV0, cfg, xml.err, xml.err_line);
+        return (OS_INVALID);
+    }
+    node = OS_GetElementsbyNode(&xml, NULL);
+    if (!node) {
         ErrorExit(CONFIG_ERROR, ARGV0, cfg);
     }
+    i = 0;
+    while (node[i]) {
+        if (strcmp(node[i]->element, "database_output") == 0) {
+            chld_node = OS_GetElementsbyNode(&xml, node[i]);
+            Read_DB(chld_node, &db_config, NULL);
+            OS_ClearNode(chld_node);
+        }
+        i++;
+    }
+    OS_ClearNode(node);
+    OS_ClearXML(&xml);
 
     /* Exit here if test config is set */
     if (test_config) {
@@ -242,4 +264,3 @@ int main(int argc, char **argv)
     /* The real daemon now */
     OS_DBD(&db_config);
 }
-

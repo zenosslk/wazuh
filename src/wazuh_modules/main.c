@@ -111,19 +111,55 @@ void wm_setup()
 {
     struct sigaction action = { .sa_handler = wm_handler };
     wmodule *database;
+    int i;
+    OS_XML xml;
+    XML_NODE node;
 
     // Get defined values from internal_options
 
     wm_task_nice = getDefine_Int("wazuh_modules", "task_nice", -20, 19);
 
-    // Read configuration: ossec.conf
-
-    if (ReadConfig(CWMODULE, DEFAULTCPATH, &wmodules, NULL) < 0)
+    debug2("%s: Reading Configuration [%s]", ARGV0, DEFAULT_MODULES_CONF);
+    if (OS_ReadXML(DEFAULT_MODULES_CONF, &xml) < 0) {
+        merror(XML_ERROR, ARGV0, DEFAULT_MODULES_CONF, xml.err, xml.err_line);
         exit(EXIT_FAILURE);
+    }
+    node = OS_GetElementsbyNode(&xml, NULL);
+    if (!node) {
+        exit(EXIT_FAILURE);
+    }
+
+    i = 0;
+    while (node[i]) {
+        if (strcmp(node[i]->element, "wodle") == 0) {
+            Read_WModule(&xml, node[i], &wmodules, NULL);
+        }
+        i++;
+    }
+    OS_ClearNode(node);
+    OS_ClearXML(&xml);
 
 #ifdef CLIENT
-    // Read configuration: agent.conf
-    ReadConfig(CWMODULE | CAGENT_CONFIG, AGENTCONFIG, &wmodules, NULL);
+
+    debug2("%s: Reading Configuration [%s]", ARGV0, SHARED_MODULES_CONF);
+    if (OS_ReadXML(SHARED_MODULES_CONF, &xml) < 0) {
+        merror(XML_ERROR, ARGV0, SHARED_MODULES_CONF, xml.err, xml.err_line);
+        exit(EXIT_FAILURE);
+    }
+    node = OS_GetElementsbyNode(&xml, NULL);
+    if (!node) {
+        exit(EXIT_FAILURE);
+    }
+
+    i = 0;
+    while (node[i]) {
+        if (strcmp(node[i]->element, "wodle") == 0 && ValidAgent(node[i])) {
+            Read_WModule(&xml, node[i], &wmodules, NULL);
+        }
+        i++;
+    }
+    OS_ClearNode(node);
+    OS_ClearXML(&xml);
 #endif
 
     if ((database = wm_database_read()))

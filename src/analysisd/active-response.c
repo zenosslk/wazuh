@@ -16,7 +16,7 @@
 #endif
 
 /* Active response commands */
-static OSList *ar_commands;
+OSList *ar_commands;
 OSList *active_responses;
 
 /* Initialize active response */
@@ -37,9 +37,9 @@ void AR_Init()
 int AR_ReadConfig(const char *cfgfile)
 {
     FILE *fp;
-    int modules = 0;
-
-    modules |= CAR;
+    int i;
+    OS_XML xml;
+    XML_NODE node, chld_node;
 
     /* Clean ar file */
     fp = fopen(DEFAULTARPATH, "w");
@@ -71,9 +71,31 @@ int AR_ReadConfig(const char *cfgfile)
     }
 
     /* Read configuration */
-    if (ReadConfig(modules, cfgfile, ar_commands, active_responses) < 0) {
+
+    debug2("%s: Reading Configuration [%s]", ARGV0, cfgfile);
+    if (OS_ReadXML(cfgfile, &xml) < 0) {
+        merror(XML_ERROR, ARGV0, cfgfile, xml.err, xml.err_line);
         return (OS_INVALID);
     }
+    node = OS_GetElementsbyNode(&xml, NULL);
+    if (!node) {
+        return (-1);
+    }
+
+    i = 0;
+    while (node[i]) {
+        if (strcmp(node[i]->element, "active-response") == 0) {
+            chld_node = OS_GetElementsbyNode(&xml, node[i]);
+            if (!chld_node) {
+                break;
+            }
+            ReadActiveResponses(chld_node, NULL, active_responses);
+            OS_ClearNode(chld_node);
+        }
+        i++;
+    }
+    OS_ClearNode(node);
+    OS_ClearXML(&xml);
 
     return (0);
 }

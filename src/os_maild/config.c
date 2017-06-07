@@ -15,9 +15,9 @@
 /* Read the Mail configuration */
 int MailConf(int test_config, const char *cfgfile, MailConfig *Mail)
 {
-    int modules = 0;
-
-    modules |= CMAIL;
+    int i;
+    OS_XML xml;
+    XML_NODE node, chld_node;
 
     Mail->to = NULL;
     Mail->reply_to = NULL;
@@ -41,9 +41,53 @@ int MailConf(int test_config, const char *cfgfile, MailConfig *Mail)
     Mail->geoip = 0;
 #endif
 
-    if (ReadConfig(modules, cfgfile, NULL, Mail) < 0) {
+    // Read mail.xml
+    debug2("%s: Reading Configuration [%s]", ARGV0, cfgfile);
+    if (OS_ReadXML(cfgfile, &xml) < 0) {
+        merror(XML_ERROR, ARGV0, cfgfile, xml.err, xml.err_line);
         return (OS_INVALID);
     }
+    node = OS_GetElementsbyNode(&xml, NULL);
+    if (!node) {
+        return (-1);
+    }
+
+    i = 0;
+    while (node[i]) {
+        if (strcmp(node[i]->element, "email_alerts") == 0) {
+            if (chld_node = OS_GetElementsbyNode(&xml, node[i]), chld_node) {
+                Read_EmailAlerts(chld_node, NULL, Mail);
+                OS_ClearNode(chld_node);
+            }
+        }
+        i++;
+    }
+    OS_ClearNode(node);
+    OS_ClearXML(&xml);
+
+    // Read mail.xml
+    debug2("%s: Reading Configuration [%s]", ARGV0, DEFAULT_ANALYSISD_CONF);
+    if (OS_ReadXML(DEFAULT_ANALYSISD_CONF, &xml) < 0) {
+        merror(XML_ERROR, ARGV0, DEFAULT_ANALYSISD_CONF, xml.err, xml.err_line);
+        return (OS_INVALID);
+    }
+    node = OS_GetElementsbyNode(&xml, NULL);
+    if (!node) {
+        return (-1);
+    }
+
+    i = 0;
+    while (node[i]) {
+        if (strcmp(node[i]->element, "global") == 0) {
+            if (chld_node = OS_GetElementsbyNode(&xml, node[i]), chld_node) {
+                Read_Global(chld_node, NULL, Mail);
+                OS_ClearNode(chld_node);
+            }
+        }
+        i++;
+    }
+    OS_ClearNode(node);
+    OS_ClearXML(&xml);
 
     if (!Mail->mn) {
         if (!test_config) {
@@ -54,4 +98,3 @@ int MailConf(int test_config, const char *cfgfile, MailConfig *Mail)
 
     return (0);
 }
-

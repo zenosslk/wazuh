@@ -98,7 +98,7 @@ static void help_analysisd(void)
     print_out("    -f          Run in foreground");
     print_out("    -u <user>   User to run as (default: %s)", USER);
     print_out("    -g <group>  Group to run as (default: %s)", GROUPGLOBAL);
-    print_out("    -c <config> Configuration file to use (default: %s)", DEFAULTCPATH);
+    print_out("    -c <config> Configuration file to use (default: %s)", DEFAULT_ANALYSISD_CONF);
     print_out("    -D <dir>    Directory to chroot into (default: %s)", DEFAULTDIR);
     print_out(" ");
     exit(1);
@@ -119,7 +119,7 @@ int main_analysisd(int argc, char **argv)
     uid_t uid;
     gid_t gid;
 
-    const char *cfg = DEFAULTCPATH;
+    const char *cfg = DEFAULT_ANALYSISD_CONF;
 
     /* Set the name */
     OS_SetName(ARGV0);
@@ -217,8 +217,8 @@ int main_analysisd(int argc, char **argv)
 
     /* Initialize Active response */
     AR_Init();
-    if (AR_ReadConfig(cfg) < 0) {
-        ErrorExit(CONFIG_ERROR, ARGV0, cfg);
+    if (AR_ReadConfig(DEFAULT_AR_CONF) < 0) {
+        ErrorExit(CONFIG_ERROR, ARGV0, DEFAULT_AR_CONF);
     }
     debug1(ASINIT, ARGV0);
 

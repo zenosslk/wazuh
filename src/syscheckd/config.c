@@ -19,9 +19,9 @@ static registry REGISTRY_EMPTY[] = { { NULL, 0 } };
 
 int Read_Syscheck_Config(const char *cfgfile)
 {
-    int modules = 0;
-
-    modules |= CSYSCHECK;
+    int i;
+    OS_XML xml;
+    XML_NODE node, chld_node;
 
     syscheck.rootcheck      = 0;
     syscheck.disabled       = 0;
@@ -43,19 +43,61 @@ int Read_Syscheck_Config(const char *cfgfile)
 #endif
     syscheck.prefilter_cmd  = NULL;
 
-    debug2("%s: Reading Configuration [%s]", "syscheckd", cfgfile);
+    /* Read syscheck.xml */
+    debug2("%s: Reading Configuration [%s]", ARGV0, cfgfile);
 
-    /* Read config */
-    if (ReadConfig(modules, cfgfile, &syscheck, NULL) < 0) {
+    if (OS_ReadXML(cfgfile, &xml) < 0) {
+        merror(XML_ERROR, ARGV0, cfgfile, xml.err, xml.err_line);
         return (OS_INVALID);
     }
 
-#ifdef CLIENT
-    debug2("%s: Reading Client Configuration [%s]", "syscheckd", cfgfile);
+    node = OS_GetElementsbyNode(&xml, NULL);
 
-    /* Read shared config */
-    modules |= CAGENT_CONFIG;
-    ReadConfig(modules, AGENTCONFIG, &syscheck, NULL);
+    if (!node) {
+        return (-1);
+    }
+
+    i = 0;
+    while (node[i]) {
+        if (strcmp(node[i]->element, "syscheck") == 0) {
+            if (chld_node = OS_GetElementsbyNode(&xml, node[i]), chld_node) {
+                Read_Syscheck(chld_node, &syscheck, NULL);
+                OS_ClearNode(chld_node);
+            }
+        }
+        i++;
+    }
+
+    OS_ClearNode(node);
+    OS_ClearXML(&xml);
+
+#ifdef CLIENT
+    /* Read shared syscheck.xml */
+    debug2("%s: Reading Client Configuration [%s]", ARGV0, SHARED_SYSCHECK_CONF);
+
+    if (OS_ReadXML(SHARED_SYSCHECK_CONF, &xml) < 0) {
+        merror(XML_ERROR, ARGV0, SHARED_SYSCHECK_CONF, xml.err, xml.err_line);
+        return (OS_INVALID);
+    }
+    node = OS_GetElementsbyNode(&xml, NULL);
+    if (!node) {
+        return (-1);
+    }
+
+    i = 0;
+    while (node[i]) {
+        if (strcmp(node[i]->element, "syscheck") == 0 && ValidAgent(node[i])) {
+            if (chld_node = OS_GetElementsbyNode(&xml, node[i]), chld_node) {
+                Read_Syscheck(chld_node, &syscheck, NULL);
+                OS_ClearNode(chld_node);
+            }
+        }
+        i++;
+    }
+
+    OS_ClearNode(node);
+    OS_ClearXML(&xml);
+
 #endif
 
 #ifndef WIN32

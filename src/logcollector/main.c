@@ -38,7 +38,7 @@ static void help_logcollector()
     print_out("                to increase the debug level.");
     print_out("    -t          Test configuration");
     print_out("    -f          Run in foreground");
-    print_out("    -c <config> Configuration file to use (default: %s)", DEFAULTCPATH);
+    print_out("    -c <config> Configuration file to use (default: %s)", DEFAULT_LOGCOLLECTOR_CONF);
     print_out(" ");
     exit(1);
 }
@@ -49,7 +49,7 @@ int main(int argc, char **argv)
     int debug_level = 0;
     int test_config = 0, run_foreground = 0;
     int accept_manager_commands = 0;
-    const char *cfg = DEFAULTCPATH;
+    const char *cfg = DEFAULT_LOGCOLLECTOR_CONF;
 
     /* Setup random */
     srandom_init();

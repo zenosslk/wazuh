@@ -29,7 +29,7 @@ static void help_agentlessd()
     print_out("    -f          Run in foreground");
     print_out("    -u <user>   User to run as (default: %s)", USER);
     print_out("    -g <group>  Group to run as (default: %s)", GROUPGLOBAL);
-    print_out("    -c <config> Configuration file to use (default: %s)", DEFAULTCPATH);
+    print_out("    -c <config> Configuration file to use (default: %s)", DEFAULT_AGENTLESS_CONF);
     print_out("    -D <dir>    Directory to chroot into (default: %s)", DEFAULTDIR);
     print_out(" ");
     exit(1);
@@ -43,7 +43,10 @@ int main(int argc, char **argv)
     const char *dir  = DEFAULTDIR;
     const char *user = USER;
     const char *group = GROUPGLOBAL;
-    const char *cfg = DEFAULTCPATH;
+    const char *cfg = DEFAULT_AGENTLESS_CONF;
+    int i;
+    OS_XML xml;
+    XML_NODE node, chld_node;
 
     /* Set the name */
     OS_SetName(ARGV0);
@@ -106,14 +109,31 @@ int main(int argc, char **argv)
     }
 
     /* Read config */
-    c = 0;
-    c |= CAGENTLESS;
     lessdc.entries = NULL;
     lessdc.queue = 0;
 
-    if (ReadConfig(c, cfg, &lessdc, NULL) < 0) {
+    // Read agentless.xml
+    debug2("%s: Reading Configuration [%s]", ARGV0, cfg);
+    if (OS_ReadXML(cfg, &xml) < 0) {
+        merror(XML_ERROR, ARGV0, cfg, xml.err, xml.err_line);
+        return (OS_INVALID);
+    }
+    node = OS_GetElementsbyNode(&xml, NULL);
+    if (!node) {
         ErrorExit(XML_INV_AGENTLESS, ARGV0);
     }
+
+    i = 0;
+    while (node[i]) {
+        if (strcmp(node[i]->element, "agentless") == 0) {
+            chld_node = OS_GetElementsbyNode(&xml, node[i]);
+            Read_CAgentless(chld_node, &lessdc, NULL);
+            OS_ClearNode(chld_node);
+        }
+        i++;
+    }
+    OS_ClearNode(node);
+    OS_ClearXML(&xml);
 
     /* Exit here if test config is set */
     if (test_config) {
@@ -162,4 +182,3 @@ int main(int argc, char **argv)
     /* The real daemon now */
     Agentlessd();
 }
-

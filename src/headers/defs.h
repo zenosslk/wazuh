@@ -259,12 +259,71 @@ https://www.gnu.org/licenses/gpl.html\n"
 /* Built-in defines */
 #define DEFAULTQPATH    DEFAULTDIR DEFAULTQUEUE
 
+
+#define MAIL_CONF            "mail.xml"
+#define ANALYSISD_CONF       "analysisd.xml"
+#define LABELS_CONF          "labels.xml"
+#define CLIENT_CONF          "client.xml"
+#define SYSCHECK_CONF        "syscheck.xml"
+#define AR_CONF              "active-response.xml"
+#define SYSLOG_CONF          "syslog.xml"
+#define LOGCOLLECTOR_CONF    "localfiles.xml"
+#define AUTH_CONF            "auth.xml"
+#define ROOTCHECK_CONF       "rootcheck.xml"
+#define REPORTS_CONF         "reports.xml"
+#define INTEGRATOR_CONF      "integrator.xml"
+#define AGENTLESS_CONF       "agentless.xml"
+#define DBD_CONF             "database.xml"
+#define REMOTE_CONF          "remote.xml"
+#define MODULES_CONF         "wodles.xml"
+
+
 #ifndef WIN32
+
 #define OSSECCONF       "/etc/ossec.conf"
 #define DEFAULTCPATH    DEFAULTDIR OSSECCONF
+
+#define DEFAULT_MAIL_CONF         DEFAULTDIR "/etc/" MAIL_CONF
+#define DEFAULT_ANALYSISD_CONF    DEFAULTDIR "/etc/" ANALYSISD_CONF
+#define DEFAULT_LABELS_CONF       DEFAULTDIR "/etc/" LABELS_CONF
+#define DEFAULT_CLIENT_CONF       DEFAULTDIR "/etc/" CLIENT_CONF
+#define DEFAULT_SYSCHECK_CONF     DEFAULTDIR "/etc/" SYSCHECK_CONF
+#define DEFAULT_AR_CONF           DEFAULTDIR "/etc/" AR_CONF
+#define DEFAULT_SYSLOG_CONF       DEFAULTDIR "/etc/" SYSLOG_CONF
+#define DEFAULT_LOGCOLLECTOR_CONF DEFAULTDIR "/etc/" LOGCOLLECTOR_CONF
+#define DEFAULT_AUTH_CONF         DEFAULTDIR "/etc/" AUTH_CONF
+#define DEFAULT_ROOTCHECK_CONF    DEFAULTDIR "/etc/" ROOTCHECK_CONF
+#define DEFAULT_REPORTS_CONF      DEFAULTDIR "/etc/" REPORTS_CONF
+#define DEFAULT_INTEGRATOR_CONF   DEFAULTDIR "/etc/" INTEGRATOR_CONF
+#define DEFAULT_AGENTLESS_CONF    DEFAULTDIR "/etc/" AGENTLESS_CONF
+#define DEFAULT_DBD_CONF          DEFAULTDIR "/etc/" DBD_CONF
+#define DEFAULT_REMOTE_CONF       DEFAULTDIR "/etc/" REMOTE_CONF
+#define DEFAULT_MODULES_CONF      DEFAULTDIR "/etc/" MODULES_CONF
+
+#define SHARED_SYSCHECK_CONF      DEFAULTDIR SHAREDCFG_DIR "/" SYSCHECK_CONF
+#define SHARED_ROOTCHECK_CONF     DEFAULTDIR SHAREDCFG_DIR "/" ROOTCHECK_CONF
+#define SHARED_LOGCOLLECTOR_CONF  DEFAULTDIR SHAREDCFG_DIR "/" LOGCOLLECTOR_CONF
+#define SHARED_LABELS_CONF        DEFAULTDIR SHAREDCFG_DIR "/" LABELS_CONF
+#define SHARED_MODULES_CONF       DEFAULTDIR SHAREDCFG_DIR "/" MODULES_CONF
+
 #else
+
 #define OSSECCONF       "ossec.conf"
 #define DEFAULTCPATH    "ossec.conf"
+
+#define DEFAULT_CLIENT_CONF       "config\\" CLIENT_CONF
+#define DEFAULT_SYSCHECK_CONF     "config\\" SYSCHECK_CONF
+#define DEFAULT_ROOTCHECK_CONF    "config\\" ROOTCHECK_CONF
+#define DEFAULT_LOGCOLLECTOR_CONF "config\\" LOGCOLLECTOR_CONF
+#define DEFAULT_LABELS_CONF       "config\\" LABELS_CONF
+#define DEFAULT_MODULES_CONF      "config\\" MODULES_CONF
+
+#define SHARED_SYSCHECK_CONF      "shared\\" SYSCHECK_CONF
+#define SHARED_ROOTCHECK_CONF     "shared\\" ROOTCHECK_CONF
+#define SHARED_LOGCOLLECTOR_CONF  "shared\\" LOGCOLLECTOR_CONF
+#define SHARED_LABELS_CONF        "shared\\" LABELS_CONF
+#define SHARED_MODULES_CONF       "shared\\" MODULES_CONF
+
 #endif
 
 #ifndef WIN32

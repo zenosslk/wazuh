@@ -311,8 +311,8 @@ int main(int argc, char **argv)
         }
 
         // Return -1 if not configured
-        if (authd_read_config(DEFAULTCPATH) < 0) {
-            ErrorExit(CONFIG_ERROR, ARGV0, DEFAULTCPATH);
+        if (authd_read_config(DEFAULT_AUTH_CONF) < 0) {
+            ErrorExit(CONFIG_ERROR, ARGV0, DEFAULT_AUTH_CONF);
         }
 
         // Overwrite arguments

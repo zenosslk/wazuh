@@ -14,17 +14,33 @@
 
 void **OS_ReadIntegratorConf(char *cfgfile, IntegratorConfig ***integrator_config)
 {
-    int modules = 0;
-
-    /* Modules for the configuration */
-    modules |= CINTEGRATORD;
+    int i;
+    OS_XML xml;
+    XML_NODE node, chld_node;
 
     /* Reading configuration */
-    if(ReadConfig(modules, cfgfile, integrator_config, NULL) < 0)
-    {
-        ErrorExit(CONFIG_ERROR, ARGV0, cfgfile);
+    // Read integrator.xml
+    debug2("%s: Reading Configuration [%s]", ARGV0, cfgfile);
+    if (OS_ReadXML(cfgfile, &xml) < 0) {
+        merror(XML_ERROR, ARGV0, cfgfile, xml.err, xml.err_line);
         return(NULL);
     }
+    node = OS_GetElementsbyNode(&xml, NULL);
+    if (!node) {
+        return(NULL);
+    }
+
+    i = 0;
+    while (node[i]) {
+        if (strcmp(node[i]->element, "integration") == 0) {
+            chld_node = OS_GetElementsbyNode(&xml, node[i]);
+            Read_Integrator(chld_node, integrator_config, NULL);
+            OS_ClearNode(chld_node);
+        }
+        i++;
+    }
+    OS_ClearNode(node);
+    OS_ClearXML(&xml);
 
     return (void**)*integrator_config;
 }

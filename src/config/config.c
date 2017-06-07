@@ -320,3 +320,97 @@ int ReadConfig(int modules, const char *cfgfile, void *d1, void *d2)
     OS_ClearXML(&xml);
     return (0);
 }
+
+int ValidAgent(xml_node *node)
+{
+    const char *xml_agent_name = "name";
+    const char *xml_agent_os = "os";
+    const char *xml_agent_profile = "profile";
+    int attrs = 0;
+
+    int passed_agent_test = 0;
+
+    if (!node->element) {
+        merror(XML_ELEMNULL, __local_name);
+        return (0);
+    }
+    /* Check if this is specific to any agent */
+    if (node->attributes && node->values) {
+        while (node->attributes[attrs] && node->values[attrs]) {
+            /* Check if there is an "name=" attribute */
+            if (strcmp(xml_agent_name, node->attributes[attrs]) == 0) {
+#ifdef CLIENT
+                char *agentname = os_read_agent_name();
+
+                if (!agentname) {
+                    passed_agent_test = 0;
+                } else {
+                    if (!OS_Match2(node->values[attrs], agentname)) {
+                        passed_agent_test = 0;
+                    }
+                    free(agentname);
+                }
+#endif
+            } else if (strcmp(xml_agent_os, node->attributes[attrs]) == 0) {
+#ifdef CLIENT
+                const char *agentos = getuname();
+
+                if (agentos) {
+                    if (!OS_Match2(node->values[attrs], agentos)) {
+                        passed_agent_test = 0;
+                    }
+                } else {
+                    passed_agent_test = 0;
+                    merror("%s: ERROR: Unable to retrieve uname.", __local_name);
+                }
+#endif
+            } else if (strcmp(xml_agent_profile, node->attributes[attrs]) == 0) {
+#ifdef CLIENT
+                char *agentprofile = os_read_agent_profile();
+                debug2("Read agent config profile name [%s]", agentprofile);
+
+                if (!agentprofile) {
+                    passed_agent_test = 0;
+                } else {
+                    /* match the profile name of this <agent_config> section
+                     * with a comma separated list of values in agent's
+                     * <config-profile> tag.
+                     */
+                    if (!OS_Match2(node->values[attrs], agentprofile)) {
+                        passed_agent_test = 0;
+                        debug2("[%s] did not match agent config profile name [%s]",
+                               node->values[attrs], agentprofile);
+                    } else {
+                        debug2("Matched agent config profile name [%s]", agentprofile);
+                    }
+                    free(agentprofile);
+                }
+#endif
+            } else {
+                merror("%s: ERROR: Error reading attribute: %s.", __local_name, node->attributes[attrs]);
+            }
+            attrs++;
+        }
+    }
+#ifdef CLIENT
+    else {
+        char *agentprofile = os_read_agent_profile();
+        debug2("agent_config element does not have any attributes.");
+
+        /* if node does not have any attributes, it is a generic config block.
+         * check if agent has a profile name
+         * if agent does not have profile name, then only read this generic
+         * agent_config block
+         */
+
+        if (!agentprofile) {
+            debug2("but agent has a profile name.");
+            passed_agent_test = 0;
+        } else {
+            free(agentprofile);
+        }
+    }
+#endif
+
+    return (passed_agent_test);
+}

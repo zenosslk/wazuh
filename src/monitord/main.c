@@ -31,7 +31,7 @@ static void help_monitord()
     print_out("    -f          Run in foreground");
     print_out("    -u <user>   User to run as (default: %s)", USER);
     print_out("    -g <group>  Group to run as (default: %s)", GROUPGLOBAL);
-    print_out("    -c <config> Configuration file to use (default: %s)", DEFAULTCPATH);
+    print_out("    -c <config> Configuration file to use (default: %s)", DEFAULT_REPORTS_CONF);
     print_out("    -D <dir>    Directory to chroot into (default: %s)", DEFAULTDIR);
     print_out("    --no-agents Disable agent monitoring.");
     print_out(" ");
@@ -47,7 +47,10 @@ int main(int argc, char **argv)
     const char *dir  = DEFAULTDIR;
     const char *user = USER;
     const char *group = GROUPGLOBAL;
-    const char *cfg = DEFAULTCPATH;
+    const char *cfg = DEFAULT_REPORTS_CONF;
+    int i;
+    OS_XML xml;
+    XML_NODE node, chld_node;
 
     struct option options[] = {
         { "no-agents", no_argument, &no_agents, 1 },
@@ -131,23 +134,42 @@ int main(int argc, char **argv)
     mond.emailfrom = NULL;
     mond.emailidsname = NULL;
 
-    c = 0;
-    c |= CREPORTS;
-    if (ReadConfig(c, cfg, &mond, NULL) < 0) {
-        ErrorExit(CONFIG_ERROR, ARGV0, cfg);
+    // Read reports.xml
+    debug2("%s: Reading Configuration [%s]", ARGV0, cfg);
+    if (OS_ReadXML(cfg, &xml) < 0) {
+        merror(XML_ERROR, ARGV0, cfg, xml.err, xml.err_line);
+        return (OS_INVALID);
     }
+    node = OS_GetElementsbyNode(&xml, NULL);
+    if (!node) {
+        ErrorExit(CONFIG_ERROR, ARGV0, DEFAULT_REPORTS_CONF);
+    }
+
+    i = 0;
+    while (node[i]) {
+        if (strcmp(node[i]->element, "reports") == 0) {
+            chld_node = OS_GetElementsbyNode(&xml, node[i]);
+            Read_CReports(chld_node, &mond, NULL);
+            OS_ClearNode(chld_node);
+        }
+        i++;
+    }
+    OS_ClearNode(node);
+    OS_ClearXML(&xml);
 
     /* If we have any reports configured, read smtp/emailfrom */
     if (mond.reports) {
         OS_XML xml;
         char *tmpsmtp;
 
-        const char *(xml_smtp[]) = {"ossec_config", "global", "smtp_server", NULL};
-        const char *(xml_from[]) = {"ossec_config", "global", "email_from", NULL};
-        const char *(xml_idsname[]) = {"ossec_config", "global", "email_idsname", NULL};
+        const char *(xml_smtp[]) = {"global", "smtp_server", NULL};
+        const char *(xml_from[]) = {"global", "email_from", NULL};
+        const char *(xml_idsname[]) = {"global", "email_idsname", NULL};
 
-        if (OS_ReadXML(cfg, &xml) < 0) {
-            ErrorExit(CONFIG_ERROR, ARGV0, cfg);
+        debug2("%s: Reading Configuration [%s]", ARGV0, DEFAULT_ANALYSISD_CONF);
+        if (OS_ReadXML(DEFAULT_ANALYSISD_CONF, &xml) < 0) {
+            merror(XML_ERROR, ARGV0, DEFAULT_ANALYSISD_CONF, xml.err, xml.err_line);
+            return (OS_INVALID);
         }
 
         tmpsmtp = OS_GetOneContentforElement(&xml, xml_smtp);

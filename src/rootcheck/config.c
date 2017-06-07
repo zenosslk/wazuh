@@ -16,20 +16,61 @@
 /* Read the rootcheck config */
 int Read_Rootcheck_Config(const char *cfgfile)
 {
-    int modules = 0;
+    int i;
+    OS_XML xml;
+    XML_NODE node, chld_node;
 
-    modules |= CROOTCHECK;
-    if (ReadConfig(modules, cfgfile, &rootcheck, NULL) < 0) {
+    debug2("%s: Reading Configuration [%s]", ARGV0, cfgfile);
+    if (OS_ReadXML(cfgfile, &xml) < 0) {
+        merror(XML_ERROR, ARGV0, cfgfile, xml.err, xml.err_line);
         return (OS_INVALID);
     }
+    node = OS_GetElementsbyNode(&xml, NULL);
+    if (!node) {
+        return (-1);
+    }
+
+    i = 0;
+    while (node[i]) {
+        if (strcmp(node[i]->element, "rootcheck") == 0) {
+            if (chld_node = OS_GetElementsbyNode(&xml, node[i]), chld_node){
+                Read_Rootcheck(chld_node, &rootcheck, NULL);
+                OS_ClearNode(chld_node);
+            }
+        }
+        i++;
+    }
+    OS_ClearNode(node);
+    OS_ClearXML(&xml);
 
 #ifdef CLIENT
     /* Read shared config */
-    modules |= CAGENT_CONFIG;
-    ReadConfig(modules, AGENTCONFIG, &rootcheck, NULL);
+    debug2("%s: Reading Client Configuration [%s]", ARGV0, SHARED_ROOTCHECK_CONF);
+
+    if (OS_ReadXML(SHARED_ROOTCHECK_CONF, &xml) < 0) {
+        merror(XML_ERROR, ARGV0, SHARED_ROOTCHECK_CONF, xml.err, xml.err_line);
+        return (OS_INVALID);
+    }
+    node = OS_GetElementsbyNode(&xml, NULL);
+    if (!node) {
+        return (-1);
+    }
+
+    i = 0;
+    while (node[i]) {
+        if (strcmp(node[i]->element, "rootcheck") == 0 && ValidAgent(node[i])) {
+            if (chld_node = OS_GetElementsbyNode(&xml, node[i]), chld_node){
+                Read_Rootcheck(chld_node, &rootcheck, NULL);
+                OS_ClearNode(chld_node);
+            }
+        }
+        i++;
+    }
+    OS_ClearNode(node);
+    OS_ClearXML(&xml);
+
 #endif
 
     return (0);
 }
 #endif /* OSSECHIDS */
-

@@ -157,7 +157,7 @@ static char *gen_diff_alert(const char *filename, time_t alert_diff_time)
         return (NULL);
     }
 
-    n = fread(buf, 1, 4096 - 1, fp);
+    n = fread(buf, 1, OS_MAXSTR - 1, fp);
     fclose(fp);
     unlink(path);
 
@@ -165,10 +165,9 @@ static char *gen_diff_alert(const char *filename, time_t alert_diff_time)
     case 0:
         merror("Unable to generate diff alert (fread).");
         return (NULL);
-    case 4095:
+    case (OS_MAXSTR - 1):
         buf[n] = '\0';
         n -= strlen(STR_MORE_CHANGES);
-
         while (n > 0 && buf[n - 1] != '\n')
             n--;
 
@@ -200,9 +199,9 @@ static int seechanges_dupfile(const char *old, const char *current)
     size_t n;
     FILE *fpr;
     FILE *fpw;
-    unsigned char buf[2048 + 1];
+    unsigned char buf[OS_MAXSTR + 1];
 
-    buf[2048] = '\0';
+    buf[OS_MAXSTR] = '\0';
 
     fpr = fopen(old, "r");
     if (!fpr) {
@@ -215,7 +214,7 @@ static int seechanges_dupfile(const char *old, const char *current)
         return (0);
     }
 
-    n = fread(buf, 1, 2048, fpr);
+    n = fread(buf, 1, OS_MAXSTR, fpr);
 #ifdef USE_MAGIC
     if (is_text(magic_cookie, buf, n) == 0) {
         goto cleanup;
@@ -229,7 +228,7 @@ static int seechanges_dupfile(const char *old, const char *current)
             merror("Unable to write data on file '%s'", current);
             break;
         }
-    } while ((n = fread(buf, 1, 2048, fpr)) > 0);
+    } while ((n = fread(buf, 1, OS_MAXSTR, fpr)) > 0);
 
 #ifdef USE_MAGIC
 cleanup:

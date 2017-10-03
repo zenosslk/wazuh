@@ -37,7 +37,7 @@
 #define LOGLEVEL_INFO 1
 #define LOGLEVEL_DEBUG 0
 
-#define OS_MAXSTR       OS_SIZE_6144    /* Size for logs, sockets, etc  */
+#define OS_MAXSTR       65536    /* Size for logs, sockets, etc  */
 #define OS_BUFFER_SIZE  OS_SIZE_2048    /* Size of general buffers      */
 #define OS_FLSIZE       OS_SIZE_256     /* Maximum file size            */
 #define OS_HEADER_SIZE  OS_SIZE_128     /* Maximum header size          */

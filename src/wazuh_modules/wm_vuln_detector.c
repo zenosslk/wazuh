@@ -1608,7 +1608,7 @@ int wm_vulnerability_detector_get_software_info(agent_software * agent, sqlite3 
     }
 
     while (size = recv(sock, buffer, OS_MAXSTR, 0), size) {
-        if (size < 10) {
+        if (size < EMPTY_WAZUH_DB_RESULT_SIZE) {
             break;
         }
         buffer[size] = '\0';
@@ -1676,7 +1676,7 @@ int wm_vulnerability_detector_get_software_info(agent_software * agent, sqlite3 
         sqlite3_exec(db, END_T, NULL, NULL, NULL);
         agent->info = 1;
     } else {
-        mterror(WM_VULNDETECTOR_LOGTAG, VU_SOFTWARE_REQUEST_ERROR, agent->agent_id);
+        mtdebug1(WM_VULNDETECTOR_LOGTAG, VU_SOFTWARE_AG_EMPTY, agent->agent_id);
     }
 
     if (obj) {

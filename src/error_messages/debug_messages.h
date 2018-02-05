@@ -34,3 +34,4 @@
 #define VU_UPDATE_VU_INFO     "(5472): Inserting vulnerability info..."
 #define VU_UPDATE_VU          "(5473): Inserting vulnerabilities..."
 #define VU_AGENT_INFO_ERROR   "(5474): Agent %s operating system could not be obtained. Maybe it is never connected. It will be omitted..."
+#define VU_SOFTWARE_AG_EMPTY  "(5475): The agent %s software has not been initialized yet"

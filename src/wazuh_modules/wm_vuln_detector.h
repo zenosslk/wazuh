@@ -15,6 +15,7 @@
 #define VU_WM_NAME "vulnerability-detector"
 #define WM_VULNDETECTOR_LOGTAG ARGV0 ":" VU_WM_NAME
 #define WM_VULNDETECTOR_DEFAULT_INTERVAL 86400 // 24H
+#define EMPTY_WAZUH_DB_RESULT_SIZE 10
 #define CVE_TEMP_FILE TMP_PATH "/cve"
 #define CVE_FIT_TEMP_FILE CVE_TEMP_FILE "-fitted"
 #define CANONICAL_REPO "https://people.canonical.com"

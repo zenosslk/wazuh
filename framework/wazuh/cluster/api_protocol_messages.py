@@ -6,6 +6,13 @@
 from itertools import chain
 from operator import itemgetter
 
+protocol_messages = {
+    'DISTRIBUTED_REQUEST'   : 'distributed',
+    'ARGS'                  : 'args',
+    'NODEAGENTS'            : 'nodeagents',
+    'REQUEST_TYPE'          : 'request_type'
+}
+
 # API Messages
 list_requests_agents = {
     'RESTART_AGENTS'        : 'restart',

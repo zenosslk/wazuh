@@ -12,6 +12,7 @@ from sys import version
 import logging
 import re
 import ast
+import json
 
 is_py2 = version[0] == '2'
 if is_py2:
@@ -93,36 +94,17 @@ def append_node_result_by_type(node, result_node, request_type, current_result=N
     return current_result
 
 
-def send_request_to_nodes(remote_nodes, config_cluster, request_type, args, cluster_depth=1):
+def send_request_to_nodes(config_cluster, header, data, nodes, args):
     threads = []
     result = {}
     result_node = {}
     result_nodes = {}
     result_queue = queue()
-    local_node = get_node()['node']
-    remote_nodes_addr = []
-    msg = None
 
-    if remote_nodes == None or len(remote_nodes) == 0:
-        remote_nodes_addr = list(map(lambda x: x['url'], get_nodes()['items']))
-    else:
-        remote_nodes_addr = remote_nodes.keys()
-
-    args_str = " ".join(args)
-
-    for node_id in remote_nodes_addr:
+    for node in nodes:
         if node_id is not None and node_id != "None":
-            logging.info("Sending {2} request from {0} to {1}".format(local_node, node_id, request_type))
-
-            # Put agents id
-            if remote_nodes.get(node_id) != None and len(remote_nodes[node_id]) > 0:
-                agents = parse_node_agents_to_str(remote_nodes[node_id])
-                msg = agents
-                if args_str > 0:
-                    msg = msg + " " + args_str
-            else:
-                msg = args_str
-            t = threading.Thread(target=send_request_to_node, args=(str(node_id), config_cluster, request_type, msg, cluster_depth, result_queue))
+            logging.info("Sending {2} request from {0} to {1}".format(get_node()['node'], nodes, header))
+            t = threading.Thread(target=send_request_to_node, args=(str(node_id), config_cluster, header, data, result_queue))
             threads.append(t)
             t.start()
             result_node = result_queue.get()
@@ -151,133 +133,70 @@ def is_cluster_running():
     return get_status_json()['running'] == 'yes'
 
 
-def parse_node_agents_to_str(node_agents):
-    '''
-    :param node_agents: dic or list with node-agents or agents
-     {
-            '192.168.56.102': ['003', 004],
-            '192.168.56.105': ['003']
-     }
-     or
-     ['003', '004']
-     :return:
-     192.168.56.102*003-004_192.168.56.105*003
-     or
-     "003-004"
-    '''
-    result = ""
-    if isinstance(node_agents, dict):
-        for node in node_agents:
-            result = str(result) + str(node) + "*" + str("-".join(node_agents[node])) + "_"
-        if result == "":
-            result = None
-        else:
-            result = result[:-1]
-    elif isinstance(node_agents, list):
-        result = "-".join(node_agents)
-    return result
+def prepare_message(request_type, node_agents={}, args=[]):
+    header = protocol_messages['DISTRIBUTED_REQUEST'] + " " + request_type
+    data = {} # Data for each node
+
+    # Send to all nodes
+    if len(node_agents) == 0:
+        nodes = list(map(lambda x: x['url'], get_nodes()['items']))
+        node_agents = {node: [] for node in nodes}
+
+    if not request_type is list_requests_cluster['MASTER_FORW']:
+        for node in node_agents.keys():
+            data[node] = {}
+            data[node][protocol_messages['NODEAGENTS']] = node_agents[node]
+            data[node][protocol_messages['ARGS']] = args
+    else:
+        node = get_ip_from_name(get_actual_master()['name'])
+        request_redirected = args.pop()
+        data[node][protocol_messages['REQUEST_TYPE']] = request_type
+        data[node][protocol_messages['NODEAGENTS']] = node_agents
+        data[node][protocol_messages['ARGS']] = args
+
+    nodes = node_agents.keys()
+    data = json.dumps(data)
+    return header, data, nodes
 
 
-def parse_node_agents_to_dic(node_agents_str):
-    '''
-    :param node_agents: 192.168.56.102*003-004_192.168.56.105*003
-    :return:
-            {
-                   '192.168.56.102': ['003', '004'],
-                   '192.168.56.105': ['003']
-            }
-    '''
-    result = {}
-    nodes =  node_agents_str.split("_")
-    for node in nodes:
-        node_agents = node.split("*")
-        result[node_agents[0]] = node_agents[1].split("-")
-    return result
-
-
-def distributed_api_request(request_type, agent_id={}, args=[], cluster_depth=1, affected_nodes=[], from_cluster=False, instance=None):
+def distributed_api_request(request_type, node_agents={}, args=[], from_cluster=False, instance=None):
+    """
+    Send distributed request
+    'node_agents': Dictionary of node -> list agents. Sample: {'192.168.56.102': ['003', '004'], '192.168.56.103': []}.
+    'args': List of arguments.
+    'from_cluster': Request comes from the cluster.
+    'instance': Instance for local request.
+    """
 
     config_cluster = read_config()
-    logging.debug("Received request. request_type-> " + str(request_type) + " | agent_id-> " + str(agent_id) + " | cluster_depth-> " + str(cluster_depth) + " | affected_nodes-> " + str(affected_nodes) + " | from_cluster-> " + str(from_cluster))
-    if agent_id != None and isinstance(agent_id, dict):
-        node_agents = agent_id
-    else:
-        node_agents = {}
+    result, result_local = None
 
-    if affected_nodes is None:
-        affected_nodes = []
-    if affected_nodes != None and not isinstance(affected_nodes, list):
-        affected_nodes = [affected_nodes]
-
-    # Redirect request to elected master
+    # Not from cluster and not elected mater --> Redirect to master
     if not from_cluster and get_actual_master()['name'] != config_cluster["node_name"]:
-        if len(node_agents) == 0 and len(affected_nodes) == 0:
-            affected_nodes = list(map(lambda x: x['url'], get_nodes()['items']))
-
-        node_agents = {get_actual_master()['url']: node_agents}
-        if len(affected_nodes) == 0:
-            args = [request_type, "-"] + args
-        else:
-            args = [request_type, "-".join(affected_nodes)] + args
+        args.append(request_type)
         request_type = list_requests_cluster['MASTER_FORW']
-        logging.info("Redirecting request to elected master. args=" + str(args))
 
-    # Put affected nodes in node_agents (not in MASTER_FORW)
-    if len(affected_nodes) > 0 and request_type != list_requests_cluster['MASTER_FORW']:
-        affected_nodes_addr = []
-        for node in affected_nodes:
-            # Is name or addr?
-            if not re.compile(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$").match(node):
-                addr = get_ip_from_name(node)
-                if addr != None:
-                    affected_nodes_addr.append(addr)
-            else:
-                affected_nodes_addr.append(node)
-        if len(affected_nodes_addr) == 0:
-            return {}
-        #filter existing dict
-        if len(node_agents) > 0:
-            node_agents_filter = {node: node_agents.get(node) for node in affected_nodes_addr}
-            node_agents = node_agents_filter
-        else: #There aren't nodes with agents, set affected nodes
-            node_agents = {node: None for node in affected_nodes_addr}
+    header, data, nodes = prepare_message(request_type=request_type, node_agents=node_agents, args=args)
 
-    # Resolve his request in local (only for elected master)
-    result_local = None
-    result = None
-    if (instance != None or request_type in list_requests_cluster.values()) \
-     and get_actual_master()['name'] == config_cluster["node_name"] \
-     and get_ip_from_name(config_cluster["node_name"]) in node_agents:
+    # Elected master resolves his own request in local
+    if (instance != None \
+        and get_actual_master()['name'] == config_cluster["node_name"] \
+        and get_ip_from_name(config_cluster["node_name"]) in node_agent):
+
         try:
-            result_local = {'data':api_request(request_type=request_type, args=args, cluster_depth=0, instance=instance), 'error':0}
+            result_local = {'data':api_request(request_type=request_type, args=node_agents[get_ip_from_name(config_cluster["node_name"])], instance=instance), 'error':0}
         except Exception as e:
             result_local = {'data':str(e), 'error':1}
         del node_agents[get_ip_from_name(config_cluster["node_name"])]
 
-    # Distributed
-    if result_local is None or len(node_agents) > 0:
-        result = send_request_to_nodes(node_agents, config_cluster, request_type, args, cluster_depth)
+    if len(node_agents) > 0:
+        result = send_request_to_nodes(config_cluster=config_cluster, header=header, data=data, nodes=nodes, args=args)
 
-    # Merge local and distributed
+    # Merge local and distributed results
     if result_local is not None:
-        result = append_node_result_by_type(get_ip_from_name(config_cluster["node_name"]), result_local, request_type, current_result=result)
+        result = append_node_result_by_type(get_ip_from_name(config_cluster["node_name"]), result_local, request_type, current_result=result, nodes=nodes)
 
     return result
-
-
-def get_node_json():
-    node = get_node()
-    node['node_id'] = node['node']
-    node['url'] = get_ip_from_name(node['node'])
-    del node['node']
-    return node
-
-
-def read_config_json():
-    config_cluster = read_config()
-    del config_cluster["node_name"]
-    del config_cluster["key"]
-    return config_cluster
 
 
 def get_config_distributed(node_id=None, cluster_depth=1):

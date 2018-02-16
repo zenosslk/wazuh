@@ -115,8 +115,11 @@ class WazuhClusterHandler(asynchat.async_chat):
         error = 0
         cmd = self.f.decrypt(response[:common.cluster_sync_msg_size]).decode()
         self.command = cmd.split(" ")
-
         logging.debug("Command received: {0}".format(self.command))
+
+        message = None
+        if len(self.command) > 0:
+            message = self.command[0]
 
         if not check_cluster_cmd(self.command, self.node_type):
             logging.error("Received invalid cluster command {0} from {1}".format(
@@ -125,18 +128,18 @@ class WazuhClusterHandler(asynchat.async_chat):
             res = "Received invalid cluster command {0}".format(self.command[0])
 
         if error == 0:
-            if self.command[0] == 'node':
+            if message is 'node':
                 res = get_node()
-            elif self.command[0] == 'zip':
+            elif message is 'zip':
                 zip_bytes = self.f.decrypt(response[common.cluster_sync_msg_size:])
                 res = extract_zip(zip_bytes)
                 self.restart_after_sync.value = 'T' if res['restart'] else 'F'
-            elif self.command[0] == 'ready':
+            elif message is 'ready':
                 # sync_one_node(False, self.addr)
                 res = "Starting to sync client's files"
                 # execute an independent process to "crontab" the sync interval
                 kill(child_pid, SIGUSR1)
-            elif self.command[0] == 'finished':
+            elif message is 'finished':
                 res = "Sleeping..."
                 self.finished_clients.value += 1
                 logging.debug("Finished clients: {} of {}".format(self.finished_clients.value, self.connected_clients.value))
@@ -146,44 +149,29 @@ class WazuhClusterHandler(asynchat.async_chat):
                     self.connected_clients.value = 0
                     kill(child_pid, SIGUSR1)
 
-            elif self.command[0] == list_requests_cluster['MASTER_FORW']:
+            elif message is protocol_messages['DISTRIBUTED_REQUEST']:
+                api_request_type = self.command[1]
+                data = json.load(self.f.decrypt(response[common.cluster_sync_msg_size:]))
+
+                if data.get(protocol_messages['REQUEST_TYPE'])
+                    api_request_type = data[protocol_messages['REQUEST_TYPE']]
+
+                if data.get(protocol_messages['NODEAGENTS'])
+                    node_agents = data[protocol_messages['NODEAGENTS']]
+
+                if data.get(protocol_messages['ARGS'])
+                    node_agents = data[protocol_messages['ARGS']]
+
+
                 args = self.f.decrypt(response[common.cluster_sync_msg_size:])
                 args = args.split(" ")
                 cluster_depth = ast.literal_eval(self.command[1]) - 1
                 args_list = []
+                
                 try:
-                    if args[0] in all_list_requests.values():
-                        agent_id = None
-                        request_type = args[0]
-                        if args[1] != "-":
-                            affected_nodes = args[1].split("-")
-                        else:
-                            affected_nodes = None
-                        if (len(args) > 2):
-                            args_list = args[2:]
-                    elif len(args) > 2 and args[1] in all_list_requests.values():
-                        agent_id = parse_node_agents_to_dic(args[0])
-                        request_type = args[1]
-                        if args[2] != "-":
-                            affected_nodes = args[2].split("-")
-                        else:
-                            affected_nodes = None
-                        if (len(args) > 3):
-                            args_list = args[3:]
-
-                    instance = get_instance(request_type)
-                    res = distributed_api_request(request_type=request_type, agent_id=agent_id, args=args_list, cluster_depth=1, affected_nodes=affected_nodes, from_cluster=True, instance=instance)
-
+                    res = "ok"
                 except Exception as e:
                     res = e
-
-            elif self.command[0] in all_list_requests.values():
-                args = self.f.decrypt(response[common.cluster_sync_msg_size:])
-                args = args.split(" ")
-                cluster_depth = ast.literal_eval(self.command[1]) - 1
-                instance = get_instance(self.command[0])
-
-                res = api_request(request_type=self.command[0], args=args, cluster_depth=cluster_depth, instance=instance)
 
             logging.debug("Command {0} executed for {1}".format(self.command[0], self.addr))
 

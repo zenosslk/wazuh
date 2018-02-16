@@ -40,11 +40,18 @@ try:
         myWazuh = Wazuh(get_init=True)
 
         from wazuh.common import *
-        from wazuh.cluster.handler import *
         from wazuh.cluster.management import *
+        from wazuh.cluster.handler import *
+        from wazuh.cluster.distributed_api import *
+        from wazuh.cluster.protocol_messages import *
         from wazuh.exception import WazuhException
         from wazuh.utils import check_output
         from wazuh.pyDaemonModule import pyDaemon, create_pid, delete_pid
+        from wazuh.agent import Agent
+        import wazuh.syscheck as syscheck
+        import wazuh.rootcheck as rootcheck
+        import wazuh.stats as stats
+        import wazuh.manager as manager
     except Exception as e:
         print("Error importing 'Wazuh' package.\n\n{0}\n".format(e))
         exit()
@@ -62,6 +69,22 @@ try:
 except:
     print("wazuh-clusterd: Python 2.7 required. Exiting.")
     exit()
+
+def get_instance(request_type):
+    instance = None
+    if request_type in list_requests_agents.values():
+            instance = Agent
+    if request_type in list_requests_wazuh.values():
+            instance = myWazuh
+    if request_type in list_requests_stats.values():
+            instance = stats
+    if request_type in list_requests_syscheck.values():
+            instance = syscheck
+    if request_type in list_requests_rootcheck.values():
+            instance = rootcheck
+    if request_type in list_requests_managers.values():
+            instance = manager
+    return instance
 
 class WazuhClusterHandler(asynchat.async_chat):
     def __init__(self, sock, addr, key, node_type, requests_queue, finished_clients, restart_after_sync, connected_clients):
@@ -122,6 +145,45 @@ class WazuhClusterHandler(asynchat.async_chat):
                     self.finished_clients.value = 0
                     self.connected_clients.value = 0
                     kill(child_pid, SIGUSR1)
+
+            elif self.command[0] == list_requests_cluster['MASTER_FORW']:
+                args = self.f.decrypt(response[common.cluster_sync_msg_size:])
+                args = args.split(" ")
+                cluster_depth = ast.literal_eval(self.command[1]) - 1
+                args_list = []
+                try:
+                    if args[0] in all_list_requests.values():
+                        agent_id = None
+                        request_type = args[0]
+                        if args[1] != "-":
+                            affected_nodes = args[1].split("-")
+                        else:
+                            affected_nodes = None
+                        if (len(args) > 2):
+                            args_list = args[2:]
+                    elif len(args) > 2 and args[1] in all_list_requests.values():
+                        agent_id = parse_node_agents_to_dic(args[0])
+                        request_type = args[1]
+                        if args[2] != "-":
+                            affected_nodes = args[2].split("-")
+                        else:
+                            affected_nodes = None
+                        if (len(args) > 3):
+                            args_list = args[3:]
+
+                    instance = get_instance(request_type)
+                    res = distributed_api_request(request_type=request_type, agent_id=agent_id, args=args_list, cluster_depth=1, affected_nodes=affected_nodes, from_cluster=True, instance=instance)
+
+                except Exception as e:
+                    res = e
+
+            elif self.command[0] in all_list_requests.values():
+                args = self.f.decrypt(response[common.cluster_sync_msg_size:])
+                args = args.split(" ")
+                cluster_depth = ast.literal_eval(self.command[1]) - 1
+                instance = get_instance(self.command[0])
+
+                res = api_request(request_type=self.command[0], args=args, cluster_depth=cluster_depth, instance=instance)
 
             logging.debug("Command {0} executed for {1}".format(self.command[0], self.addr))
 

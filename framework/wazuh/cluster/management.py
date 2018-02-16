@@ -7,6 +7,7 @@ from wazuh.agent import Agent
 from wazuh.manager import status
 from wazuh.configuration import get_ossec_conf
 from wazuh.InputValidator import InputValidator
+from wazuh.cluster.protocol_messages import all_list_requests
 from wazuh import common
 from subprocess import check_output
 from datetime import datetime
@@ -127,8 +128,9 @@ def send_request(host, port, key, data, file=None):
     error = 0
     try:
         fernet_key = Fernet(key.encode('base64','strict'))
-        client = WazuhClusterClient(host, int(port), fernet_key, data, file)
-        asyncore.loop()
+        mymap = dict()
+        client = WazuhClusterClient(host, int(port), fernet_key, data, file, mymap)
+        asyncore.loop(map=mymap)
         data = client.response
 
     except NameError as e:
@@ -167,7 +169,7 @@ def check_cluster_cmd(cmd, node_type):
         return True
 
     # check command type
-    if not cmd[0] in ['zip', 'node']:
+    if not cmd[0] in ['zip', 'node'] and not cmd[0] in all_list_requests.values():
         return False
 
     # second argument of zip is a number
@@ -459,3 +461,50 @@ def get_agent_status_json():
             }]
 
     return cluster_dict
+
+
+def get_ip_from_name(name, csocket=None):
+    if csocket is None:
+        cluster_socket = connect_to_db_socket()
+    else:
+        cluster_socket = csocket
+
+    try:
+        send_to_socket(cluster_socket, "getip {0}".format(name))
+        data = receive_data_from_db_socket(cluster_socket)
+        if data == "":
+            data = None
+    except Exception as e:
+        logging.warning("Error getting IP of node {}: {}".format(name, str(e)))
+        data = None
+
+    if not data:
+        logging.warning("Error getting IP of node: Received empty name")
+
+    if csocket is None:
+        cluster_socket.close()
+
+    return data
+
+
+def get_name_from_ip(addr, csocket=None):
+    if csocket is None:
+        cluster_socket = connect_to_db_socket()
+    else:
+        cluster_socket = csocket
+
+    try:
+        send_to_socket(cluster_socket, "getname {0}".format(addr))
+        data = receive_data_from_db_socket(cluster_socket)
+        if data == "":
+            data = None
+    except Exception as e:
+        data = None
+
+    if data == None:
+        logging.warning("Error getting name of node {}".format(addr))
+
+    if csocket is None:
+        cluster_socket.close()
+
+    return data

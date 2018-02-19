@@ -21,9 +21,9 @@ else:
     from queue import Queue as queue
 
 
-def send_request_to_node(node, config_cluster, request_type, args, cluster_depth, result_queue):
+def send_request_to_node(node, config_cluster, request_type, args, result_queue):
     error, response = send_request(host=node, port=config_cluster["port"], key=config_cluster['key'],
-                        data="{1} {2} {0}".format('a'*(common.cluster_protocol_plain_size - len(request_type + " " + str(cluster_depth) + " ")), request_type, str(cluster_depth)),
+                        data="{0} {1}".format(request_type, 'a'*(common.cluster_protocol_plain_size - len(request_type + " "))),
                          file=args.encode())
     if error != 0 or ((isinstance(response, dict) and response.get('error') is not None and response['error'] != 0)):
         logging.debug(response)
@@ -102,25 +102,25 @@ def send_request_to_nodes(config_cluster, header, data, nodes, args):
     result_queue = queue()
 
     for node in nodes:
-        if node_id is not None and node_id != "None":
+        if node is not None:
             logging.info("Sending {2} request from {0} to {1}".format(get_node()['node'], nodes, header))
-            t = threading.Thread(target=send_request_to_node, args=(str(node_id), config_cluster, header, data, result_queue))
+            t = threading.Thread(target=send_request_to_node, args=(str(node), config_cluster, header, data, result_queue))
             threads.append(t)
             t.start()
             result_node = result_queue.get()
         else:
             result_node['data'] = {}
             result_node['data']['failed_ids'] = []
-            for id in remote_nodes[node_id]:
+            for id in remote_nodes[node]:
                 node = {}
                 node['id'] = id
                 node['error'] = {'message':"Agent not found",'code':-1}
                 result_node['data']['failed_ids'].append(node)
-        result_nodes[node_id] = result_node
+        result_nodes[node] = result_node
     for t in threads:
         t.join()
     for node, result_node in result_nodes.iteritems():
-        result = append_node_result_by_type(node, result_node, request_type, result)
+        result = append_node_result_by_type(node, result_node, header, result)
     return result
 
 
@@ -169,7 +169,7 @@ def distributed_api_request(request_type, node_agents={}, args=[], from_cluster=
     """
 
     config_cluster = read_config()
-    result, result_local = None
+    result, result_local = None, None
 
     # Not from cluster and not elected mater --> Redirect to master
     '''

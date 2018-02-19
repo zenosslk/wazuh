@@ -479,18 +479,18 @@ def get_remote_nodes(connected=True, updateDBname=False):
 
     # Get connected nodes in the cluster
     if connected:
-        cluster = [n['url'] for n in filter(lambda x: x['status'] == 'connected',
+        cluster = [(n['url'], n['localhost']) for n in filter(lambda x: x['status'] == 'connected',
                     all_nodes)]
     else:
-        cluster = [n['url'] for n in all_nodes]
+        cluster = [(n['url'], n['localhost']) for n in all_nodes]
     # search the index of the localhost in the cluster
     try:
-        localhost_index = cluster.index('localhost')
+        localhost_index = next (x[0] for x in enumerate(cluster) if x[1][1])
     except ValueError as e:
         logging.error("Cluster nodes are not correctly configured at ossec.conf.")
         exit(1)
 
-    return list(compress(cluster, map(lambda x: x != localhost_index, range(len(cluster)))))
+    return list(compress(map(itemgetter(0), cluster), map(lambda x: x != localhost_index, range(len(cluster)))))
 
 
 def run_logtest(synchronized=False):

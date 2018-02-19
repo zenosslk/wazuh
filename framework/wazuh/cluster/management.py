@@ -275,26 +275,27 @@ def get_nodes(updateDBname=False):
             if error == 0:
                 if response['error'] == 0:
                     response = response['data']
+                    response['localhost'] = False
                 else:
                     logging.warning("Received an error response from {0}: {1}".format(url, response))
                     error_response = True
         else:
             error = 0
-            url = "localhost"
             response = get_node()
+            response['localhost'] = True
 
         if error == 1:
             logging.warning("Error connecting with {0}: {1}".format(url, response))
             error_response = True
 
         if error_response:
-            data.append({'error': response, 'node':'unknown', 'status':'disconnected', 'url':url})
+            data.append({'error': response, 'node':'unknown', 'status':'disconnected', 'url':url, 'localhost': False})
             error_response = False
             continue
 
         if config_cluster['node_type'] == 'master' or \
            response['type'] == 'master' or url == "localhost":
-            data.append({'url':url, 'node':response['node'],
+            data.append({'url':url, 'node':response['node'], 'localhost': response['localhost'],
                          'status':'connected', 'cluster':response['cluster']})
 
             if updateDBname:

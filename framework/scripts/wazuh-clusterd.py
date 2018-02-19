@@ -73,17 +73,17 @@ except:
 def get_instance(request_type):
     instance = None
     if request_type in list_requests_agents.values():
-            instance = Agent
+        instance = Agent
     if request_type in list_requests_wazuh.values():
-            instance = myWazuh
+        instance = myWazuh
     if request_type in list_requests_stats.values():
-            instance = stats
+        instance = stats
     if request_type in list_requests_syscheck.values():
-            instance = syscheck
+        instance = syscheck
     if request_type in list_requests_rootcheck.values():
-            instance = rootcheck
+        instance = rootcheck
     if request_type in list_requests_managers.values():
-            instance = manager
+        instance = manager
     return instance
 
 class WazuhClusterHandler(asynchat.async_chat):
@@ -120,6 +120,7 @@ class WazuhClusterHandler(asynchat.async_chat):
         message = None
         if len(self.command) > 0:
             message = self.command[0]
+        logging.debug("Message received: {0}".format(message))
 
         if not check_cluster_cmd(self.command, self.node_type):
             logging.error("Received invalid cluster command {0} from {1}".format(
@@ -130,15 +131,18 @@ class WazuhClusterHandler(asynchat.async_chat):
         if error == 0:
             if message == 'node':
                 res = get_node()
+
             elif message == 'zip':
                 zip_bytes = self.f.decrypt(response[common.cluster_sync_msg_size:])
                 res = extract_zip(zip_bytes)
                 self.restart_after_sync.value = 'T' if res['restart'] else 'F'
+
             elif message == 'ready':
                 # sync_one_node(False, self.addr)
                 res = "Starting to sync client's files"
                 # execute an independent process to "crontab" the sync interval
                 kill(child_pid, SIGUSR1)
+
             elif message == 'finished':
                 res = "Sleeping..."
                 self.finished_clients.value += 1
@@ -149,27 +153,22 @@ class WazuhClusterHandler(asynchat.async_chat):
                     self.connected_clients.value = 0
                     kill(child_pid, SIGUSR1)
 
-            elif message == api_protocol.protocol_messages['DISTRIBUTED_REQUEST']:
+            elif message == api_protocol.all_list_requests['DISTRIBUTED_REQUEST']:
                 api_request_type = self.command[1]
-                data = json.load(self.f.decrypt(response[common.cluster_sync_msg_size:]))
+                instance = get_instance(api_request_type)
+                data = json.loads(self.f.decrypt(response[common.cluster_sync_msg_size:]))
+                agents = {}
+                args = []
 
                 if data.get(api_protocol.protocol_messages['REQUEST_TYPE']):
                     api_request_type = data[api_protocol.protocol_messages['REQUEST_TYPE']]
-
                 if data.get(api_protocol.protocol_messages['NODEAGENTS']):
-                    node_agents = data[api_protocol.protocol_messages['NODEAGENTS']]
-
+                    agents = data[api_protocol.protocol_messages['NODEAGENTS']]
                 if data.get(api_protocol.protocol_messages['ARGS']):
                     args = data[api_protocol.protocol_messages['ARGS']]
 
-
-                args = self.f.decrypt(response[common.cluster_sync_msg_size:])
-                args = args.split(" ")
-                cluster_depth = ast.literal_eval(self.command[1]) - 1
-                args_list = []
-
                 try:
-                    res = "ok"
+                    res = execute_request(request_type=api_request_type, args=args, agents=agents, instance=instance)
                 except Exception as e:
                     res = e
 

@@ -158,7 +158,7 @@ def check_cluster_cmd(cmd, node_type):
         return False
 
     # check cmd len list
-    if len(cmd) != 2:
+    if len(cmd) != 2 and len(cmd) != 3:
         return False
 
     # check cmd len
@@ -417,7 +417,7 @@ def get_file_status_json(file_list = {'fields':[]}, manager = {'fields':[]}):
             cluster_dict[manager][status] = [file]
 
     return cluster_dict
-    
+
 
 def get_ip_from_name(name, csocket=None):
     if csocket is None:

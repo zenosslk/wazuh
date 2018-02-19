@@ -7,7 +7,6 @@ from itertools import chain
 from operator import itemgetter
 
 protocol_messages = {
-    'DISTRIBUTED_REQUEST'   : 'distributed',
     'ARGS'                  : 'args',
     'NODEAGENTS'            : 'nodeagents',
     'REQUEST_TYPE'          : 'request_type'
@@ -53,6 +52,7 @@ list_requests_stats = {
 }
 
 list_requests_cluster = {
+    'DISTRIBUTED_REQUEST'   : 'distributed',
     'CLUSTER_CONFIG'        : 'cluster_config',
     'MASTER_FORW'           : 'master_forward',
     'zip'                   : 'zip',

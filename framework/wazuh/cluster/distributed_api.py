@@ -13,23 +13,13 @@ import logging
 import re
 import ast
 import json
+import logging
 
 is_py2 = version[0] == '2'
 if is_py2:
     from Queue import Queue as queue
 else:
     from queue import Queue as queue
-
-
-def send_request_to_node(node, config_cluster, request_type, args, result_queue):
-    error, response = send_request(host=node, port=config_cluster["port"], key=config_cluster['key'],
-                        data="{0} {1}".format(request_type, 'a'*(common.cluster_protocol_plain_size - len(request_type + " "))),
-                         file=args.encode())
-    if error != 0 or ((isinstance(response, dict) and response.get('error') is not None and response['error'] != 0)):
-        logging.debug(response)
-        result_queue.put({'node': node, 'reason': "{0} - {1}".format(error, response), 'error': 1})
-    else:
-        result_queue.put(response)
 
 
 def append_node_result_by_type(node, result_node, request_type, current_result=None):
@@ -94,6 +84,17 @@ def append_node_result_by_type(node, result_node, request_type, current_result=N
     return current_result
 
 
+def send_request_to_node(host, config_cluster, header, data, result_queue):
+    header = "{0} {1}".format(header, 'a'*(common.cluster_protocol_plain_size - len(header + " ")))
+    error, response = send_request(host=host, port=config_cluster["port"], key=config_cluster['key'],
+                        data=header, file=data.encode())
+    if error != 0 or ((isinstance(response, dict) and response.get('error') is not None and response['error'] != 0)):
+        logging.debug(response)
+        result_queue.put({'node': host, 'reason': "{0} - {1}".format(error, response), 'error': 1})
+    else:
+        result_queue.put(response)
+
+
 def send_request_to_nodes(config_cluster, header, data, nodes, args):
     threads = []
     result = {}
@@ -103,19 +104,19 @@ def send_request_to_nodes(config_cluster, header, data, nodes, args):
 
     for node in nodes:
         if node is not None:
-            logging.info("Sending {2} request from {0} to {1}".format(get_node()['node'], nodes, header))
-            t = threading.Thread(target=send_request_to_node, args=(str(node), config_cluster, header, data, result_queue))
+            logging.info("Sending {0} request from {1} to {2} (Message: '{3}')".format(header, get_node()['node'], node, str(data[node])))
+            t = threading.Thread(target=send_request_to_node, args=(str(node), config_cluster, header, json.dumps(data[node]), result_queue))
             threads.append(t)
             t.start()
             result_node = result_queue.get()
         else:
             result_node['data'] = {}
             result_node['data']['failed_ids'] = []
-            for id in remote_nodes[node]:
-                node = {}
-                node['id'] = id
-                node['error'] = {'message':"Agent not found",'code':-1}
-                result_node['data']['failed_ids'].append(node)
+            for id in data[node][api_protocol.protocol_messages['NODEAGENTS']]:
+                res= {}
+                res['id'] = id
+                res['error'] = {'message':"Agent does not exist",'code':1701}
+                result_node['data']['failed_ids'].append(res)
         result_nodes[node] = result_node
     for t in threads:
         t.join()
@@ -125,8 +126,7 @@ def send_request_to_nodes(config_cluster, header, data, nodes, args):
 
 
 def is_a_local_request():
-    config_cluster = read_config()
-    return not config_cluster or not check_cluster_status() or config_cluster['node_type'] == 'client'
+    return not read_config() or not check_cluster_status() or read_config()['node_type'] == 'client'
 
 
 def is_cluster_running():
@@ -134,7 +134,20 @@ def is_cluster_running():
 
 
 def prepare_message(request_type, node_agents={}, args=[]):
-    header = api_protocol.protocol_messages['DISTRIBUTED_REQUEST'] + " " + request_type
+    """
+    Prepare a message to be send.
+    :param request_type: Type of request. It have to be one of 'api_protocol_messages.all_list_requests'.
+    :param node_agents: Dictionary of nodes -> list of agents. Sample:
+        - Agent 003 and 004 in node 192.168.56.102: node_agents={'192.168.56.102': ['003', '004']},
+        - Node 192.168.56.103 or all agents in node 192.168.56.103: {'192.168.56.103': []}.
+        - All nodes: {}.
+    :param args: List of arguments.
+    :return:
+        - header: Header of message to be send. It's a String.
+        - data: Body of message to be send. It's a dictinionary with NODEAGENTS, ARGS and REQUEST_TYPE.
+        - nodes: List of destinatary nodes of the message.
+    """
+    header = api_protocol.all_list_requests['DISTRIBUTED_REQUEST'] + " " + request_type
     data = {} # Data for each node
 
     # Send to all nodes
@@ -155,19 +168,23 @@ def prepare_message(request_type, node_agents={}, args=[]):
         data[node][api_protocol.protocol_messages['ARGS']] = args
 
     nodes = node_agents.keys()
-    data = json.dumps(data)
     return header, data, nodes
 
 
 def distributed_api_request(request_type, node_agents={}, args=[], from_cluster=False, instance=None):
     """
-    Send distributed request
-    'node_agents': Dictionary of node -> list agents. Sample: {'192.168.56.102': ['003', '004'], '192.168.56.103': []}.
-    'args': List of arguments.
-    'from_cluster': Request comes from the cluster.
-    'instance': Instance for local request.
+    Send distributed request using the cluster.
+    :param request_type: Type of request. It have to be one of 'api_protocol_messages.all_list_requests'.
+    :param node_agents: Dictionary of nodes -> list of agents. Sample:
+        - Agent 003 and 004 in node 192.168.56.102: node_agents={'192.168.56.102': ['003', '004']},
+        - Node 192.168.56.103 or all agents in node 192.168.56.103: {'192.168.56.103': []}.
+        - All nodes: {}.
+    :param args: List of arguments.
+    :param from_cluster: Request comes from the cluster. If request is from cluster, it not be redirected.
+    :param instance: Instance for resolve local request.
+    :return: Output of API distributed call in JSON.
     """
-
+    logging.warning("distributed_api_request: Received request_type='" + str(request_type) + "' node_agents='" + str(node_agents) + "' args='" + str(args) + "' from_cluster='" + str(from_cluster)) #TODO: Remove this line.
     config_cluster = read_config()
     result, result_local = None, None
 
@@ -179,6 +196,8 @@ def distributed_api_request(request_type, node_agents={}, args=[], from_cluster=
     '''
 
     header, data, nodes = prepare_message(request_type=request_type, node_agents=node_agents, args=args)
+    logging.warning("distributed_api_request: got message header='" + str(header) + "' data='" + str(data) + "' nodes='" + str(nodes)) #TODO: Remove this line.
+
 
     # Elected master resolves his own request in local
     '''
@@ -190,11 +209,13 @@ def distributed_api_request(request_type, node_agents={}, args=[], from_cluster=
             result_local = {'data':api_request(request_type=request_type, args=node_agents[get_ip_from_name(config_cluster["node_name"])], instance=instance), 'error':0}
         except Exception as e:
             result_local = {'data':str(e), 'error':1}
-        del node_agents[get_ip_from_name(config_cluster["node_name"])]
+        del data[get_ip_from_name(config_cluster["node_name"])]
     '''
 
-    if len(node_agents) > 0:
+    if len(data) > 0:
+        logging.warning("distributed_api_request: Sending request") #TODO: Remove this line.
         result = send_request_to_nodes(config_cluster=config_cluster, header=header, data=data, nodes=nodes, args=args)
+        logging.warning("distributed_api_request: result=" + str(result)) #TODO: Remove this line.
 
     # Merge local and distributed results
     '''
@@ -216,157 +237,75 @@ def get_config_distributed(node_id=None, cluster_depth=1):
         return distributed_api_request(request_type=request_type, cluster_depth=cluster_depth, affected_nodes=node_id)
 
 
-def api_request(request_type, args, cluster_depth, instance=None):
-    res = ""
+def execute_request(request_type, args=[], agents={}, instance=None):
+    result = ""
+
+    logging.warning("Data received --> request_type --> {}  ---  args --> {}  ---  agents --> {}".format(str(request_type), str(args), str(agents))) #TODO: Remove this line.
 
     if request_type == api_protocol.list_requests_agents['RESTART_AGENTS']:
-        if (len(args) == 2):
-            agents = args[0].split("-")
-            restart_all = ast.literal_eval(args[1])
-        else:
-            agents = None
-            restart_all = ast.literal_eval(args[0])
-        res = instance.restart_agents(agents, restart_all, cluster_depth)
-
+        result = instance.restart_agents(agent_id=agents, restart_all=args[0])
+    '''
     elif request_type == api_protocol.list_requests_agents['AGENTS_UPGRADE_RESULT']:
-        try:
-            agent = args[0]
-            timeout = args[1]
-            res = instance.get_upgrade_result(agent, timeout)
-        except Exception as e:
-            res = str(e)
+        result = instance.get_upgrade_result(agent=agents, timeout=args[0])
 
     elif request_type == api_protocol.list_requests_agents['AGENTS_UPGRADE']:
-        agent_id = args[0]
-        wpk_repo = ast.literal_eval(args[1])
-        version = ast.literal_eval(args[2])
-        force = ast.literal_eval(args[3])
-        chunk_size = ast.literal_eval(args[4])
-        try:
-            res = instance.upgrade_agent(agent_id, wpk_repo, version, force, chunk_size)
-        except Exception as e:
-            res = str(e)
+        result = instance.upgrade_agent(agent_id=agents, wpk_repo=args[0], \
+             version=args[1], force=args[2], chunk_size=args[3])
 
     elif request_type == api_protocol.list_requests_agents['AGENTS_UPGRADE_CUSTOM']:
-        agent_id = args[0]
-        file_path = ast.literal_eval(args[1])
-        installer = ast.literal_eval(args[2])
-        try:
-            res = instance.upgrade_agent_custom(agent_id, file_path, installer)
-        except Exception as e:
-            res = str(e)
+        result = instance.upgrade_agent_custom(agent_id=agents, file_path=args[0], installer=args[1])
 
     elif request_type == api_protocol.list_requests_syscheck['SYSCHECK_LAST_SCAN']:
-        res = instance.last_scan(args[0])
+        result = instance.last_scan(args[0])
 
     elif request_type == api_protocol.list_requests_syscheck['SYSCHECK_RUN']:
-        if (len(args) == 2):
-            agents = args[0]
-            all_agents = ast.literal_eval(args[1])
-        else:
-            agents = None
-            all_agents = ast.literal_eval(args[0])
-        res = instance.run(agents, all_agents, cluster_depth)
+        result = instance.run(agents=agents, all_agents=args[0])
 
     elif request_type == api_protocol.list_requests_syscheck['SYSCHECK_CLEAR']:
-        if (len(args) == 2):
-            agents = args[0]
-            all_agents = ast.literal_eval(args[1])
-        else:
-            agents = None
-            all_agents = ast.literal_eval(args[0])
-        res = instance.clear(agents, all_agents, cluster_depth)
+        result = instance.clear(agents=agents, all_agents=args[0])
 
     elif request_type == api_protocol.list_requests_rootcheck['ROOTCHECK_PCI']:
-        index = 0
-        agents = None
-        if (len(args) == 5):
-            agents = args[0]
-            index = index + 1
-        offset = ast.literal_eval(args[index])
-        index = index + 1
-        limit = ast.literal_eval(args[index])
-        index = index + 1
-        sort = ast.literal_eval(args[index])
-        index = index + 1
-        search = ast.literal_eval(args[index])
-        res = args
-        res = instance.get_pci(agents, offset, limit, sort, search)
+        result = instance.get_pci(agents=agents, offset=args[0], limit=args[1], sort=args[2], search=args[3])
 
     elif request_type == api_protocol.list_requests_rootcheck['ROOTCHECK_CIS']:
-        index = 0
-        agents = None
-        if (len(args) == 5):
-            agents = args[0]
-            index = index + 1
-        offset = ast.literal_eval(args[index])
-        index = index + 1
-        limit = ast.literal_eval(args[index])
-        index = index + 1
-        sort = ast.literal_eval(args[index])
-        index = index + 1
-        search = ast.literal_eval(args[index])
-        res = args
-        res = instance.get_cis(agents, offset, limit, sort, search)
+        result = instance.get_cis(agents=agents, offset=args[0], limit=args[1], sort=args[2], search=args[3])
 
     elif request_type == api_protocol.list_requests_rootcheck['ROOTCHECK_LAST_SCAN']:
-        res = instance.last_scan(args[0])
+        result = instance.last_scan(args[0])
 
     elif request_type == api_protocol.list_requests_rootcheck['ROOTCHECK_RUN']:
-        if (len(args) == 2):
-            agents = args[0]
-            all_agents = ast.literal_eval(args[1])
-        else:
-            agents = None
-            all_agents = ast.literal_eval(args[0])
-        res = instance.run(agents, all_agents, cluster_depth)
+        result = instance.run(agents=agents, all_agents=args[0])
 
     elif request_type == api_protocol.list_requests_rootcheck['ROOTCHECK_CLEAR']:
-        if (len(args) == 2):
-            agents = args[0]
-            all_agents = ast.literal_eval(args[1])
-        else:
-            agents = None
-            all_agents = ast.literal_eval(args[0])
-        res = instance.clear(agents, all_agents, cluster_depth)
+        result = instance.clear(agents=agents, all_agents=args[0])
 
     elif request_type == api_protocol.list_requests_managers['MANAGERS_STATUS']:
-        res = instance.managers_status(cluster_depth=cluster_depth)
+        result = instance.managers_status()
 
     elif request_type == api_protocol.list_requests_managers['MANAGERS_LOGS']:
-        type_log = args[0]
-        category = args[1]
-        months = ast.literal_eval(args[2])
-        offset = ast.literal_eval(args[3])
-        limit = ast.literal_eval( args[4])
-        sort = ast.literal_eval(args[5])
-        search = ast.literal_eval(args[6])
-        res = instance.managers_ossec_log(type_log=type_log, category=category, months=months, offset=offset, limit=limit, sort=sort, search=search, cluster_depth=cluster_depth)
+        result = instance.managers_ossec_log(type_log=args[0], category=args[1], months=args[2], \
+              offset=args[3], limit=args[4], sort=args[5], search=args[6], cluster_depth=args[7])
 
     elif request_type == api_protocol.list_requests_managers['MANAGERS_LOGS_SUMMARY']:
-        months = ast.literal_eval(args[0])
-        res = instance.managers_ossec_log_summary(months=months, cluster_depth=cluster_depth)
+        result = instance.managers_ossec_log_summary(months=args[0])
 
     elif request_type == api_protocol.list_requests_stats['MANAGERS_STATS_TOTALS']:
-        year = ast.literal_eval(args[0])
-        month = ast.literal_eval(args[1])
-        day = ast.literal_eval(args[2])
-        res = instance.totals(year=year, month=month, day=day, cluster_depth=cluster_depth)
+        result = instance.totals(year=args[0], month=args[1], day=args[2])
 
     elif request_type == api_protocol.list_requests_stats['MANAGERS_STATS_HOURLY']:
-        res = instance.hourly(cluster_depth=cluster_depth)
+        result = instance.hourly()
 
     elif request_type == api_protocol.list_requests_stats['MANAGERS_STATS_WEEKLY']:
-        res = instance.weekly(cluster_depth=cluster_depth)
+        result = instance.weekly()
 
     elif request_type == api_protocol.list_requests_managers['MANAGERS_OSSEC_CONF']:
-        section = args[0]
-        field = ast.literal_eval(args[1])
-        res = instance.managers_get_ossec_conf(section=section, field=field, cluster_depth=cluster_depth)
+        result = instance.managers_get_ossec_conf(section=args[0], field=args[1])
 
     elif request_type == api_protocol.list_requests_wazuh['MANAGERS_INFO']:
-        res = instance.managers_get_ossec_init(cluster_depth=cluster_depth)
+        result = instance.managers_get_ossec_init()
 
     elif request_type == api_protocol.list_requests_cluster['CLUSTER_CONFIG']:
-        res = get_config_distributed(cluster_depth=cluster_depth)
-    return res
+        result = get_config_distributed()
+
+    '''
+    return result

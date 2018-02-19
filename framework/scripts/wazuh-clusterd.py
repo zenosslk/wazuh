@@ -43,7 +43,7 @@ try:
         from wazuh.cluster.management import *
         from wazuh.cluster.handler import *
         from wazuh.cluster.distributed_api import *
-        from wazuh.cluster.protocol_messages import *
+        from wazuh.cluster.api_protocol_messages import *
         from wazuh.exception import WazuhException
         from wazuh.utils import check_output
         from wazuh.pyDaemonModule import pyDaemon, create_pid, delete_pid
@@ -128,18 +128,18 @@ class WazuhClusterHandler(asynchat.async_chat):
             res = "Received invalid cluster command {0}".format(self.command[0])
 
         if error == 0:
-            if message is 'node':
+            if message == 'node':
                 res = get_node()
-            elif message is 'zip':
+            elif message == 'zip':
                 zip_bytes = self.f.decrypt(response[common.cluster_sync_msg_size:])
                 res = extract_zip(zip_bytes)
                 self.restart_after_sync.value = 'T' if res['restart'] else 'F'
-            elif message is 'ready':
+            elif message == 'ready':
                 # sync_one_node(False, self.addr)
                 res = "Starting to sync client's files"
                 # execute an independent process to "crontab" the sync interval
                 kill(child_pid, SIGUSR1)
-            elif message is 'finished':
+            elif message == 'finished':
                 res = "Sleeping..."
                 self.finished_clients.value += 1
                 logging.debug("Finished clients: {} of {}".format(self.finished_clients.value, self.connected_clients.value))
@@ -149,25 +149,25 @@ class WazuhClusterHandler(asynchat.async_chat):
                     self.connected_clients.value = 0
                     kill(child_pid, SIGUSR1)
 
-            elif message is protocol_messages['DISTRIBUTED_REQUEST']:
+            elif message == api_protocol.protocol_messages['DISTRIBUTED_REQUEST']:
                 api_request_type = self.command[1]
                 data = json.load(self.f.decrypt(response[common.cluster_sync_msg_size:]))
 
-                if data.get(protocol_messages['REQUEST_TYPE'])
-                    api_request_type = data[protocol_messages['REQUEST_TYPE']]
+                if data.get(api_protocol.protocol_messages['REQUEST_TYPE']):
+                    api_request_type = data[api_protocol.protocol_messages['REQUEST_TYPE']]
 
-                if data.get(protocol_messages['NODEAGENTS'])
-                    node_agents = data[protocol_messages['NODEAGENTS']]
+                if data.get(api_protocol.protocol_messages['NODEAGENTS']):
+                    node_agents = data[api_protocol.protocol_messages['NODEAGENTS']]
 
-                if data.get(protocol_messages['ARGS'])
-                    node_agents = data[protocol_messages['ARGS']]
+                if data.get(api_protocol.protocol_messages['ARGS']):
+                    args = data[api_protocol.protocol_messages['ARGS']]
 
 
                 args = self.f.decrypt(response[common.cluster_sync_msg_size:])
                 args = args.split(" ")
                 cluster_depth = ast.literal_eval(self.command[1]) - 1
                 args_list = []
-                
+
                 try:
                     res = "ok"
                 except Exception as e:

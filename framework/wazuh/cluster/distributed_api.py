@@ -3,8 +3,8 @@
 # Created by Wazuh, Inc. <info@wazuh.com>.
 # This program is a free software; you can redistribute it and/or modify it under the terms of GPLv2
 
-from wazuh.cluster.management import send_request, read_config, check_cluster_status, get_node, get_nodes, get_status_json, get_name_from_ip, get_ip_from_name, get_actual_master
-from wazuh.cluster.api_protocol_messages import *
+from wazuh.cluster.management import send_request, read_config, check_cluster_status, get_node, get_nodes, get_status_json, get_name_from_ip, get_ip_from_name
+from wazuh.cluster import api_protocol_messages as api_protocol
 from wazuh.exception import WazuhException
 from wazuh import common
 import threading
@@ -35,7 +35,7 @@ def send_request_to_node(node, config_cluster, request_type, args, cluster_depth
 def append_node_result_by_type(node, result_node, request_type, current_result=None):
     if current_result == None:
         current_result = {}
-    if request_type == list_requests_agents['RESTART_AGENTS']:
+    if request_type == api_protocol.list_requests_agents['RESTART_AGENTS']:
         if isinstance(result_node.get('data'), dict):
             if result_node.get('data').get('affected_agents') != None:
                 if current_result.get('affected_agents') is None:
@@ -58,10 +58,10 @@ def append_node_result_by_type(node, result_node, request_type, current_result=N
                 current_result = result_node
 
     elif  isinstance(current_result, dict) and \
-    (request_type in list_requests_managers.values() or \
-     request_type in list_requests_wazuh.values() or \
-      request_type in list_requests_stats.values() or \
-       request_type == list_requests_cluster['CLUSTER_CONFIG']):
+    (request_type in api_protocol.list_requests_managers.values() or \
+     request_type in api_protocol.list_requests_wazuh.values() or \
+      request_type in api_protocol.list_requests_stats.values() or \
+       request_type == api_protocol.list_requests_cluster['CLUSTER_CONFIG']):
         if current_result.get('items') == None:
             current_result['items'] = []
         if result_node.get('data') != None:
@@ -134,7 +134,7 @@ def is_cluster_running():
 
 
 def prepare_message(request_type, node_agents={}, args=[]):
-    header = protocol_messages['DISTRIBUTED_REQUEST'] + " " + request_type
+    header = api_protocol.protocol_messages['DISTRIBUTED_REQUEST'] + " " + request_type
     data = {} # Data for each node
 
     # Send to all nodes
@@ -142,17 +142,17 @@ def prepare_message(request_type, node_agents={}, args=[]):
         nodes = list(map(lambda x: x['url'], get_nodes()['items']))
         node_agents = {node: [] for node in nodes}
 
-    if not request_type is list_requests_cluster['MASTER_FORW']:
+    if not request_type is api_protocol.list_requests_cluster['MASTER_FORW']:
         for node in node_agents.keys():
             data[node] = {}
-            data[node][protocol_messages['NODEAGENTS']] = node_agents[node]
-            data[node][protocol_messages['ARGS']] = args
+            data[node][api_protocol.protocol_messages['NODEAGENTS']] = node_agents[node]
+            data[node][api_protocol.protocol_messages['ARGS']] = args
     else:
         node = get_ip_from_name(get_actual_master()['name'])
         request_redirected = args.pop()
-        data[node][protocol_messages['REQUEST_TYPE']] = request_type
-        data[node][protocol_messages['NODEAGENTS']] = node_agents
-        data[node][protocol_messages['ARGS']] = args
+        data[node][api_protocol.protocol_messages['REQUEST_TYPE']] = request_type
+        data[node][api_protocol.protocol_messages['NODEAGENTS']] = node_agents
+        data[node][api_protocol.protocol_messages['ARGS']] = args
 
     nodes = node_agents.keys()
     data = json.dumps(data)
@@ -172,13 +172,16 @@ def distributed_api_request(request_type, node_agents={}, args=[], from_cluster=
     result, result_local = None
 
     # Not from cluster and not elected mater --> Redirect to master
+    '''
     if not from_cluster and get_actual_master()['name'] != config_cluster["node_name"]:
         args.append(request_type)
-        request_type = list_requests_cluster['MASTER_FORW']
+        request_type = api_protocol.list_requests_cluster['MASTER_FORW']
+    '''
 
     header, data, nodes = prepare_message(request_type=request_type, node_agents=node_agents, args=args)
 
     # Elected master resolves his own request in local
+    '''
     if (instance != None \
         and get_actual_master()['name'] == config_cluster["node_name"] \
         and get_ip_from_name(config_cluster["node_name"]) in node_agent):
@@ -188,13 +191,16 @@ def distributed_api_request(request_type, node_agents={}, args=[], from_cluster=
         except Exception as e:
             result_local = {'data':str(e), 'error':1}
         del node_agents[get_ip_from_name(config_cluster["node_name"])]
+    '''
 
     if len(node_agents) > 0:
         result = send_request_to_nodes(config_cluster=config_cluster, header=header, data=data, nodes=nodes, args=args)
 
     # Merge local and distributed results
+    '''
     if result_local is not None:
         result = append_node_result_by_type(get_ip_from_name(config_cluster["node_name"]), result_local, request_type, current_result=result, nodes=nodes)
+    '''
 
     return result
 
@@ -206,14 +212,14 @@ def get_config_distributed(node_id=None, cluster_depth=1):
         if not is_cluster_running():
             raise WazuhException(3015)
 
-        request_type = list_requests_cluster['CLUSTER_CONFIG']
+        request_type = api_protocol.list_requests_cluster['CLUSTER_CONFIG']
         return distributed_api_request(request_type=request_type, cluster_depth=cluster_depth, affected_nodes=node_id)
 
 
 def api_request(request_type, args, cluster_depth, instance=None):
     res = ""
 
-    if request_type == list_requests_agents['RESTART_AGENTS']:
+    if request_type == api_protocol.list_requests_agents['RESTART_AGENTS']:
         if (len(args) == 2):
             agents = args[0].split("-")
             restart_all = ast.literal_eval(args[1])
@@ -222,7 +228,7 @@ def api_request(request_type, args, cluster_depth, instance=None):
             restart_all = ast.literal_eval(args[0])
         res = instance.restart_agents(agents, restart_all, cluster_depth)
 
-    elif request_type == list_requests_agents['AGENTS_UPGRADE_RESULT']:
+    elif request_type == api_protocol.list_requests_agents['AGENTS_UPGRADE_RESULT']:
         try:
             agent = args[0]
             timeout = args[1]
@@ -230,7 +236,7 @@ def api_request(request_type, args, cluster_depth, instance=None):
         except Exception as e:
             res = str(e)
 
-    elif request_type == list_requests_agents['AGENTS_UPGRADE']:
+    elif request_type == api_protocol.list_requests_agents['AGENTS_UPGRADE']:
         agent_id = args[0]
         wpk_repo = ast.literal_eval(args[1])
         version = ast.literal_eval(args[2])
@@ -241,7 +247,7 @@ def api_request(request_type, args, cluster_depth, instance=None):
         except Exception as e:
             res = str(e)
 
-    elif request_type == list_requests_agents['AGENTS_UPGRADE_CUSTOM']:
+    elif request_type == api_protocol.list_requests_agents['AGENTS_UPGRADE_CUSTOM']:
         agent_id = args[0]
         file_path = ast.literal_eval(args[1])
         installer = ast.literal_eval(args[2])
@@ -250,10 +256,10 @@ def api_request(request_type, args, cluster_depth, instance=None):
         except Exception as e:
             res = str(e)
 
-    elif request_type == list_requests_syscheck['SYSCHECK_LAST_SCAN']:
+    elif request_type == api_protocol.list_requests_syscheck['SYSCHECK_LAST_SCAN']:
         res = instance.last_scan(args[0])
 
-    elif request_type == list_requests_syscheck['SYSCHECK_RUN']:
+    elif request_type == api_protocol.list_requests_syscheck['SYSCHECK_RUN']:
         if (len(args) == 2):
             agents = args[0]
             all_agents = ast.literal_eval(args[1])
@@ -262,7 +268,7 @@ def api_request(request_type, args, cluster_depth, instance=None):
             all_agents = ast.literal_eval(args[0])
         res = instance.run(agents, all_agents, cluster_depth)
 
-    elif request_type == list_requests_syscheck['SYSCHECK_CLEAR']:
+    elif request_type == api_protocol.list_requests_syscheck['SYSCHECK_CLEAR']:
         if (len(args) == 2):
             agents = args[0]
             all_agents = ast.literal_eval(args[1])
@@ -271,7 +277,7 @@ def api_request(request_type, args, cluster_depth, instance=None):
             all_agents = ast.literal_eval(args[0])
         res = instance.clear(agents, all_agents, cluster_depth)
 
-    elif request_type == list_requests_rootcheck['ROOTCHECK_PCI']:
+    elif request_type == api_protocol.list_requests_rootcheck['ROOTCHECK_PCI']:
         index = 0
         agents = None
         if (len(args) == 5):
@@ -287,7 +293,7 @@ def api_request(request_type, args, cluster_depth, instance=None):
         res = args
         res = instance.get_pci(agents, offset, limit, sort, search)
 
-    elif request_type == list_requests_rootcheck['ROOTCHECK_CIS']:
+    elif request_type == api_protocol.list_requests_rootcheck['ROOTCHECK_CIS']:
         index = 0
         agents = None
         if (len(args) == 5):
@@ -303,10 +309,10 @@ def api_request(request_type, args, cluster_depth, instance=None):
         res = args
         res = instance.get_cis(agents, offset, limit, sort, search)
 
-    elif request_type == list_requests_rootcheck['ROOTCHECK_LAST_SCAN']:
+    elif request_type == api_protocol.list_requests_rootcheck['ROOTCHECK_LAST_SCAN']:
         res = instance.last_scan(args[0])
 
-    elif request_type == list_requests_rootcheck['ROOTCHECK_RUN']:
+    elif request_type == api_protocol.list_requests_rootcheck['ROOTCHECK_RUN']:
         if (len(args) == 2):
             agents = args[0]
             all_agents = ast.literal_eval(args[1])
@@ -315,7 +321,7 @@ def api_request(request_type, args, cluster_depth, instance=None):
             all_agents = ast.literal_eval(args[0])
         res = instance.run(agents, all_agents, cluster_depth)
 
-    elif request_type == list_requests_rootcheck['ROOTCHECK_CLEAR']:
+    elif request_type == api_protocol.list_requests_rootcheck['ROOTCHECK_CLEAR']:
         if (len(args) == 2):
             agents = args[0]
             all_agents = ast.literal_eval(args[1])
@@ -324,10 +330,10 @@ def api_request(request_type, args, cluster_depth, instance=None):
             all_agents = ast.literal_eval(args[0])
         res = instance.clear(agents, all_agents, cluster_depth)
 
-    elif request_type == list_requests_managers['MANAGERS_STATUS']:
+    elif request_type == api_protocol.list_requests_managers['MANAGERS_STATUS']:
         res = instance.managers_status(cluster_depth=cluster_depth)
 
-    elif request_type == list_requests_managers['MANAGERS_LOGS']:
+    elif request_type == api_protocol.list_requests_managers['MANAGERS_LOGS']:
         type_log = args[0]
         category = args[1]
         months = ast.literal_eval(args[2])
@@ -337,30 +343,30 @@ def api_request(request_type, args, cluster_depth, instance=None):
         search = ast.literal_eval(args[6])
         res = instance.managers_ossec_log(type_log=type_log, category=category, months=months, offset=offset, limit=limit, sort=sort, search=search, cluster_depth=cluster_depth)
 
-    elif request_type == list_requests_managers['MANAGERS_LOGS_SUMMARY']:
+    elif request_type == api_protocol.list_requests_managers['MANAGERS_LOGS_SUMMARY']:
         months = ast.literal_eval(args[0])
         res = instance.managers_ossec_log_summary(months=months, cluster_depth=cluster_depth)
 
-    elif request_type == list_requests_stats['MANAGERS_STATS_TOTALS']:
+    elif request_type == api_protocol.list_requests_stats['MANAGERS_STATS_TOTALS']:
         year = ast.literal_eval(args[0])
         month = ast.literal_eval(args[1])
         day = ast.literal_eval(args[2])
         res = instance.totals(year=year, month=month, day=day, cluster_depth=cluster_depth)
 
-    elif request_type == list_requests_stats['MANAGERS_STATS_HOURLY']:
+    elif request_type == api_protocol.list_requests_stats['MANAGERS_STATS_HOURLY']:
         res = instance.hourly(cluster_depth=cluster_depth)
 
-    elif request_type == list_requests_stats['MANAGERS_STATS_WEEKLY']:
+    elif request_type == api_protocol.list_requests_stats['MANAGERS_STATS_WEEKLY']:
         res = instance.weekly(cluster_depth=cluster_depth)
 
-    elif request_type == list_requests_managers['MANAGERS_OSSEC_CONF']:
+    elif request_type == api_protocol.list_requests_managers['MANAGERS_OSSEC_CONF']:
         section = args[0]
         field = ast.literal_eval(args[1])
         res = instance.managers_get_ossec_conf(section=section, field=field, cluster_depth=cluster_depth)
 
-    elif request_type == list_requests_wazuh['MANAGERS_INFO']:
+    elif request_type == api_protocol.list_requests_wazuh['MANAGERS_INFO']:
         res = instance.managers_get_ossec_init(cluster_depth=cluster_depth)
 
-    elif request_type == list_requests_cluster['CLUSTER_CONFIG']:
+    elif request_type == api_protocol.list_requests_cluster['CLUSTER_CONFIG']:
         res = get_config_distributed(cluster_depth=cluster_depth)
     return res

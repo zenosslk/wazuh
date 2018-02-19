@@ -7,7 +7,7 @@ from wazuh.agent import Agent
 from wazuh.manager import status
 from wazuh.configuration import get_ossec_conf
 from wazuh.InputValidator import InputValidator
-from wazuh.cluster.protocol_messages import all_list_requests
+from wazuh.cluster.api_protocol_messages import all_list_requests
 from wazuh import common
 from subprocess import check_output
 from datetime import datetime
@@ -61,8 +61,13 @@ if check_cluster_status():
 
 
 class WazuhClusterClient(asynchat.async_chat):
-    def __init__(self, host, port, key, data, file):
-        asynchat.async_chat.__init__(self)
+    def __init__(self, host, port, key, data, file, map=None):
+        asynchat.async_chat.__init__(self, map=map)
+        if not map:
+            self.map = asyncore.socket_map
+        else:
+            self.map = map
+
         self.can_read = False
         self.can_write = True
         self.received_data = []

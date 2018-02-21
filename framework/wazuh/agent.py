@@ -1103,47 +1103,39 @@ class Agent:
         :param restart_all: Restarts all agents.
         :return: Message.
         """
-        if is_a_local_request():
-            if restart_all:
-                oq = OssecQueue(common.ARQUEUE)
-                ret_msg = oq.send_msg_to_agent(OssecQueue.RESTART_AGENTS)
-                oq.close()
-                return ret_msg
-            else:
-                failed_ids = list()
-                affected_agents = list()
-                if isinstance(agent_id, list):
-                    for id in agent_id:
-                        try:
-                            Agent(id).restart()
-                            affected_agents.append(id)
-                        except Exception as e:
-                            failed_ids.append(create_exception_dic(id, e))
-                else:
-                    try:
-                        Agent(agent_id).restart()
-                        affected_agents.append(agent_id)
-                    except Exception as e:
-                        failed_ids.append(create_exception_dic(agent_id, e))
-                if not failed_ids:
-                    message = 'All selected agents were restarted'
-                else:
-                    message = 'Some agents were not restarted'
-
-                final_dict = {}
-                if failed_ids:
-                    final_dict = {'msg': message, 'affected_agents': affected_agents, 'failed_ids': failed_ids}
-                else:
-                    final_dict = {'msg': message, 'affected_agents': affected_agents}
-
-                return final_dict
+        if restart_all:
+            oq = OssecQueue(common.ARQUEUE)
+            ret_msg = oq.send_msg_to_agent(OssecQueue.RESTART_AGENTS)
+            oq.close()
+            return ret_msg
         else:
-            if not is_cluster_running():
-                raise WazuhException(3015)
+            failed_ids = list()
+            affected_agents = list()
+            if isinstance(agent_id, list):
+                for id in agent_id:
+                    try:
+                        Agent(id).restart()
+                        affected_agents.append(id)
+                    except Exception as e:
+                        failed_ids.append(create_exception_dic(id, e))
+            else:
+                try:
+                    Agent(agent_id).restart()
+                    affected_agents.append(agent_id)
+                except Exception as e:
+                    failed_ids.append(create_exception_dic(agent_id, e))
+            if not failed_ids:
+                message = 'All selected agents were restarted'
+            else:
+                message = 'Some agents were not restarted'
 
-            request_type = list_requests_agents['RESTART_AGENTS']
-            args = [restart_all]
-            return distributed_api_request(request_type=request_type, node_agents=Agent.get_agents_by_node(agent_id), args=args)
+            final_dict = {}
+            if failed_ids:
+                final_dict = {'msg': message, 'affected_agents': affected_agents, 'failed_ids': failed_ids}
+            else:
+                final_dict = {'msg': message, 'affected_agents': affected_agents}
+
+            return final_dict
 
     @staticmethod
     def get_agent_by_name(agent_name, select=None):
@@ -2041,36 +2033,3 @@ class Agent:
                 }]
 
         return cluster_dict
-
-
-    def get_node_agent(self):
-        data = None
-        try:
-            node_name = self.get_basic_information()['node_name']
-            data = get_ip_from_name(node_name)
-        except Exception as e:
-            data = None
-        return data
-
-
-    @staticmethod
-    def get_agents_by_node(agent_id):
-        """
-        Get a dictionary of affected agents by node.
-        :param agent_id: Agent string or list of agents.
-        :return: Dictionary of nodes -> list of agents. Sample:
-            - Agent 003 and 004 in node 192.168.56.102: node_agents={'192.168.56.102': ['003', '004']},
-            - Node 192.168.56.103 or all agents in node 192.168.56.103: {'192.168.56.103': []}.
-            - All nodes: {}.
-        """
-        node_agents = {}
-        if isinstance(agent_id, list):
-            for id in agent_id:
-                addr = Agent(id).get_node_agent()
-                if node_agents.get(addr) is None:
-                    node_agents[addr] = []
-                node_agents[addr].append(str(id).zfill(3))
-        else:
-            if agent_id is not None:
-                node_agents[Agent(agent_id).get_node_agent()] = [str(agent_id).zfill(3)]
-        return node_agents

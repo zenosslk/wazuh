@@ -266,6 +266,38 @@ def get_config_distributed(node_id=None, from_cluster=False):
         return distributed_api_request(request_type=request_type, node_agents=get_dict_nodes(node_id))
 
 
+def get_node_agent():
+    data = None
+    try:
+        node_name = Agent(id).get_basic_information()['node_name']
+        data = get_ip_from_name(node_name)
+    except Exception as e:
+        data = None
+    return data
+
+
+def get_agents_by_node(agent_id):
+    """
+    Get a dictionary of affected agents by node.
+    :param agent_id: Agent string or list of agents.
+    :return: Dictionary of nodes -> list of agents. Sample:
+        - Agent 003 and 004 in node 192.168.56.102: node_agents={'192.168.56.102': ['003', '004']},
+        - Node 192.168.56.103 or all agents in node 192.168.56.103: {'192.168.56.103': []}.
+        - All nodes: {}.
+    """
+    node_agents = {}
+    if isinstance(agent_id, list):
+        for id in agent_id:
+            addr = Agent(id).get_node_agent()
+            if node_agents.get(addr) is None:
+                node_agents[addr] = []
+            node_agents[addr].append(str(id).zfill(3))
+    else:
+        if agent_id is not None:
+            node_agents[Agent(agent_id).get_node_agent()] = [str(agent_id).zfill(3)]
+    return node_agents
+
+
 def execute_request(request_type, args={}, agents={}):
     result = ""
 
@@ -274,37 +306,43 @@ def execute_request(request_type, args={}, agents={}):
     logging.warning("Data received --> request_type --> {}  ---  args --> {}  ---  agents --> {}".format(str(request_type), str(args), str(agents))) #TODO: Remove this line.
 
     functions = {
-        api_protocol.list_requests_managers['MANAGERS_INFO']: my_wazuh.get_ossec_init,
-        api_protocol.list_requests_managers['MANAGERS_STATUS']: manager.status,
-        api_protocol.list_requests_managers['MANAGERS_OSSEC_CONF']: manager.get_ossec_conf,
-        api_protocol.list_requests_managers['MANAGERS_LOGS']: manager.ossec_log,
-        api_protocol.list_requests_managers['MANAGERS_LOGS_SUMMARY']: manager.ossec_log_summary,
-        api_protocol.list_requests_stats['MANAGERS_STATS_TOTALS']: stats.totals,
-        api_protocol.list_requests_stats['MANAGERS_STATS_HOURLY']: stats.hourly,
-        api_protocol.list_requests_stats['MANAGERS_STATS_WEEKLY']: stats.weekly,
-        api_protocol.list_requests_agents['RESTART_AGENTS']: Agent.restart_agents,
-        api_protocol.list_requests_agents['AGENTS_UPGRADE_RESULT']: Agent.get_upgrade_result,
-        api_protocol.list_requests_agents['AGENTS_UPGRADE']: Agent.upgrade_agent,
-        api_protocol.list_requests_agents['AGENTS_UPGRADE_CUSTOM']: Agent.upgrade_agent_custom,
-        api_protocol.list_requests_agents['SYSCHECK_LAST_SCAN']: syscheck.last_scan,
-        api_protocol.list_requests_agents['SYSCHECK_RUN']: syscheck.run,
-        api_protocol.list_requests_agents['SYSCHECK_CLEAR']: syscheck.clear,
-        api_protocol.list_requests_agents['ROOTCHECK_PCI']: rootcheck.get_pci,
-        api_protocol.list_requests_agents['ROOTCHECK_CIS']: rootcheck.get_cis,
-        api_protocol.list_requests_agents['ROOTCHECK_RUN']: rootcheck.run,
-        api_protocol.list_requests_agents['ROOTCHECK_CLEAR']: rootcheck.clear,
-        api_protocol.list_requests_agents['CLUSTER_CONFIG']: read_config
+        api_protocol.all_list_requests['MANAGERS_INFO']: my_wazuh.get_ossec_init,
+        api_protocol.all_list_requests['MANAGERS_STATUS']: manager.status,
+        api_protocol.all_list_requests['MANAGERS_OSSEC_CONF']: manager.get_ossec_conf,
+        api_protocol.all_list_requests['MANAGERS_LOGS']: manager.ossec_log,
+        api_protocol.all_list_requests['MANAGERS_LOGS_SUMMARY']: manager.ossec_log_summary,
+        api_protocol.all_list_requests['MANAGERS_STATS_TOTALS']: stats.totals,
+        api_protocol.all_list_requests['MANAGERS_STATS_HOURLY']: stats.hourly,
+        api_protocol.all_list_requests['MANAGERS_STATS_WEEKLY']: stats.weekly,
+        api_protocol.all_list_requests['RESTART_AGENTS']: Agent.restart_agents,
+        api_protocol.all_list_requests['AGENTS_UPGRADE_RESULT']: Agent.get_upgrade_result,
+        api_protocol.all_list_requests['AGENTS_UPGRADE']: Agent.upgrade_agent,
+        api_protocol.all_list_requests['AGENTS_UPGRADE_CUSTOM']: Agent.upgrade_agent_custom,
+        api_protocol.all_list_requests['SYSCHECK_LAST_SCAN']: syscheck.last_scan,
+        api_protocol.all_list_requests['SYSCHECK_RUN']: syscheck.run,
+        api_protocol.all_list_requests['SYSCHECK_CLEAR']: syscheck.clear,
+        api_protocol.all_list_requests['ROOTCHECK_PCI']: rootcheck.get_pci,
+        api_protocol.all_list_requests['ROOTCHECK_CIS']: rootcheck.get_cis,
+        api_protocol.all_list_requests['ROOTCHECK_RUN']: rootcheck.run,
+        api_protocol.all_list_requests['ROOTCHECK_CLEAR']: rootcheck.clear,
+        api_protocol.all_list_requests['CLUSTER_CONFIG']: read_config
     }
 
     return received_request(kwargs=args, request_function=functions[request_type],
                             request_type=request_type, from_cluster=True)
 
 
-def received_request(kwargs, request_function, request_type, node_id=None, agent_id=None, from_cluster=False):
+def received_request(kwargs, request_function, request_type, from_cluster=False):
     if is_a_local_request() or from_cluster:
         return request_function(**kwargs)
     else:
         if not is_cluster_running():
             raise WazuhException(3015)
 
-    return distributed_api_request(request_type=request_type, node_agents=get_dict_nodes(node_id), args=kwargs)
+    node_agents = {}
+    if kwargs.get('agent_id'):
+        node_agents = get_agents_by_node(kwargs['agent_id'])
+    elif kwargs.get('node_id'):
+        node_agents = get_dict_nodes(kwargs['node_id'])
+
+    return distributed_api_request(request_type=request_type, node_agents=node_agents, args=kwargs)

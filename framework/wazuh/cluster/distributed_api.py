@@ -314,6 +314,14 @@ def execute_request(request_type, args={}, agents={}):
         api_protocol.all_list_requests['MANAGERS_STATS_TOTALS']: stats.totals,
         api_protocol.all_list_requests['MANAGERS_STATS_HOURLY']: stats.hourly,
         api_protocol.all_list_requests['MANAGERS_STATS_WEEKLY']: stats.weekly,
+        api_protocol.all_list_requests['MANAGERS_INFO_NODE']: my_wazuh.get_ossec_init,
+        api_protocol.all_list_requests['MANAGERS_STATUS_NODE']: manager.status,
+        api_protocol.all_list_requests['MANAGERS_OSSEC_CONF_NODE']: manager.get_ossec_conf,
+        api_protocol.all_list_requests['MANAGERS_LOGS_NODE']: manager.ossec_log,
+        api_protocol.all_list_requests['MANAGERS_LOGS_SUMMARY_NODE']: manager.ossec_log_summary,
+        api_protocol.all_list_requests['MANAGERS_STATS_TOTALS_NODE']: stats.totals,
+        api_protocol.all_list_requests['MANAGERS_STATS_HOURLY_NODE']: stats.hourly,
+        api_protocol.all_list_requests['MANAGERS_STATS_WEEKLY_NODE']: stats.weekly,
         api_protocol.all_list_requests['RESTART_AGENTS']: Agent.restart_agents,
         api_protocol.all_list_requests['AGENTS_UPGRADE_RESULT']: Agent.get_upgrade_result,
         api_protocol.all_list_requests['AGENTS_UPGRADE']: Agent.upgrade_agent,
@@ -333,17 +341,18 @@ def execute_request(request_type, args={}, agents={}):
 
 
 def received_request(kwargs, request_function, request_type, from_cluster=False):
+    node_agents = {}
+    if kwargs.get('agent_id'):
+        node_agents = get_agents_by_node(kwargs['agent_id'])
+    elif kwargs.get('node_id'):
+        node_agents = get_dict_nodes(kwargs['node_id'])
+        del kwargs['node_id']
+
     if not request_type in api_protocol.all_list_requests.values() or \
             is_a_local_request() or from_cluster:
         return request_function(**kwargs)
     else:
         if not is_cluster_running():
             raise WazuhException(3015)
-
-    node_agents = {}
-    if kwargs.get('agent_id'):
-        node_agents = get_agents_by_node(kwargs['agent_id'])
-    elif kwargs.get('node_id'):
-        node_agents = get_dict_nodes(kwargs['node_id'])
 
     return distributed_api_request(request_type=request_type, node_agents=node_agents, args=kwargs)

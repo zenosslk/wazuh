@@ -169,7 +169,7 @@ def check_cluster_cmd(cmd, node_type):
 
     # check cmd len
     if len(' '.join(cmd)) != common.cluster_protocol_plain_size:
-        logging.error("'{0}' it's too big. Max lenght allowed for commands: {1}".format(cmd, common.cluster_protocol_plain_size))
+        logging.error("'{0}' it's too big. Max length allowed for commands: {1}".format(cmd, common.cluster_protocol_plain_size))
         return False
 
     # 'ready' cmd can only be sent by a master node to a client node

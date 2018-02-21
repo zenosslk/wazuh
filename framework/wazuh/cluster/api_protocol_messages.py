@@ -14,38 +14,38 @@ protocol_messages = {
 
 # API Messages
 list_requests_agents = {
-    'RESTART_AGENTS'        : 'restart',
-    'AGENTS_UPGRADE_RESULT' : 'agents_upg_result',
-    'AGENTS_UPGRADE'        : 'agents_upg',
-    'AGENTS_UPGRADE_CUSTOM' : 'agents_upg_custom'
+    'RESTART_AGENTS'        : 'PUT/agents/restart',
+    'AGENTS_UPGRADE_RESULT' : '/agents/:agent_id/upgrade_result',
+    'AGENTS_UPGRADE'        : 'PUT/agents/:agent_id/upgrade',
+    'AGENTS_UPGRADE_CUSTOM' : 'PUT/agents/:agent_id/upgrade_custom'
 }
 
 list_requests_syscheck = {
-    'SYSCHECK_LAST_SCAN'    : 'syscheck_last',
-    'SYSCHECK_RUN'          : 'syscheck_run',
-    'SYSCHECK_CLEAR'        : 'syscheck_clear'
+    'SYSCHECK_LAST_SCAN'    : '/syscheck/:agent_id/last_scan',
+    'SYSCHECK_RUN'          : 'PUT/syscheck',
+    'SYSCHECK_CLEAR'        : 'DELETE/syscheck'
 }
 
 list_requests_rootcheck = {
-    'ROOTCHECK_LAST_SCAN'   : 'rootcheck_last',
-    'ROOTCHECK_PCI'         : 'rootcheck_pci',
-    'ROOTCHECK_CIS'         : 'rootcheck_cis',
-    'ROOTCHECK_RUN'         : 'rootcheck_run',
-    'ROOTCHECK_CLEAR'       : 'rootcheck_clear'
+    'ROOTCHECK_LAST_SCAN'   : '/rootcheck/:agent_id/last_scan',
+    'ROOTCHECK_PCI'         : '/rootcheck/:agent_id/pci',
+    'ROOTCHECK_CIS'         : '/rootcheck/:agent_id/cis',
+    'ROOTCHECK_RUN'         : 'PUT/rootcheck',
+    'ROOTCHECK_CLEAR'       : 'DELETE/rootcheck'
 }
 
 list_requests_managers = {
-    'MANAGERS_INFO'         : 'manager_info',
-    'MANAGERS_STATUS'       : 'manager_status',
-    'MANAGERS_OSSEC_CONF'   : 'manager_ossec_conf',
-    'MANAGERS_LOGS_SUMMARY' : 'manager_logs_sum',
-    'MANAGERS_LOGS'         : 'manager_logs'
+    'MANAGERS_INFO'         : '/manager/info',
+    'MANAGERS_STATUS'       : '/manager/status',
+    'MANAGERS_OSSEC_CONF'   : '/manager/configuration',
+    'MANAGERS_LOGS_SUMMARY' : '/manager/logs/summary',
+    'MANAGERS_LOGS'         : '/manager/logs'
 }
 
 list_requests_stats = {
-    'MANAGERS_STATS_TOTALS' : 'manager_stats_to',
-    'MANAGERS_STATS_WEEKLY' : 'manager_stats_we',
-    'MANAGERS_STATS_HOURLY' : 'manager_stats_ho'
+    'MANAGERS_STATS_TOTALS' : '/manager/stats',
+    'MANAGERS_STATS_WEEKLY' : '/manager/stats/weekly',
+    'MANAGERS_STATS_HOURLY' : '/manager/stats/hourly'
 }
 
 list_requests_cluster = {

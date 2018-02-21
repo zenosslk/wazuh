@@ -35,14 +35,11 @@ list_requests_rootcheck = {
 }
 
 list_requests_managers = {
+    'MANAGERS_INFO'         : 'manager_info',
     'MANAGERS_STATUS'       : 'manager_status',
     'MANAGERS_OSSEC_CONF'   : 'manager_ossec_conf',
     'MANAGERS_LOGS_SUMMARY' : 'manager_logs_sum',
     'MANAGERS_LOGS'         : 'manager_logs'
-}
-
-list_requests_wazuh = {
-    'MANAGERS_INFO'         : 'manager_info'
 }
 
 list_requests_stats = {

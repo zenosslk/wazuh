@@ -23,7 +23,10 @@ else:
 
 
 def append_node_result_by_type(node, result_node, request_type, current_result=None):
-    if current_result == None:
+    request_type = request_type.split(' ')
+    if request_type > 1 and request_type[0] == api_protocol.list_requests_cluster['DISTRIBUTED_REQUEST']:
+        request_type = request_type[1]
+    if current_result is None:
         current_result = {}
     if request_type == api_protocol.list_requests_agents['RESTART_AGENTS']:
         if isinstance(result_node.get('data'), dict):
@@ -37,24 +40,23 @@ def append_node_result_by_type(node, result_node, request_type, current_result=N
                     current_result['failed_ids'] = []
                 current_result['failed_ids'].extend(result_node['data']['failed_ids'])
 
-            if result_node.get('data').get('failed_ids') != None and result_node.get('data').get('msg') != None:
+            if not result_node.get('data').get('failed_ids') is None and not result_node.get('data').get('msg') is None:
                 current_result['msg'] = result_node['data']['msg']
-            if current_result.get('failed_ids') == None and result_node.get('data').get('msg') != None:
+            if current_result.get('failed_ids') is None and not result_node.get('data').get('msg') is None:
                 current_result['msg'] = result_node['data']['msg']
-            if current_result.get('failed_ids') != None and current_result.get('affected_agents') != None:
+            if not current_result.get('failed_ids') is None and not current_result.get('affected_agents') is None:
                 current_result['msg'] = "Some agents were not restarted"
         else:
-            if current_result.get('data') == None:
+            if current_result.get('data') is None:
                 current_result = result_node
 
     elif  isinstance(current_result, dict) and \
     (request_type in api_protocol.list_requests_managers.values() or \
-     request_type in api_protocol.list_requests_wazuh.values() or \
       request_type in api_protocol.list_requests_stats.values() or \
        request_type == api_protocol.list_requests_cluster['CLUSTER_CONFIG']):
-        if current_result.get('items') == None:
+        if current_result.get('items') is None:
             current_result['items'] = []
-        if result_node.get('data') != None:
+        if not result_node.get('data') is None:
             current_result['items'].append(result_node['data'])
         else:
             current_result['items'].append(result_node)
@@ -69,14 +71,14 @@ def append_node_result_by_type(node, result_node, request_type, current_result=N
             current_result['items'][index].append({
                 'node_id':get_name_from_ip(node),
                 'url':node})
-        if current_result.get('totalItems') == None:
+        if current_result.get('totalItems') is None:
             current_result['totalItems'] = 0
         current_result['totalItems'] += 1
     else:
         if isinstance(result_node, dict):
-            if result_node.get('data') != None:
+            if not result_node.get('data') is None:
                 current_result = result_node['data']
-            elif result_node.get('message') != None:
+            elif not result_node.get('message') is None:
                 current_result['message'] = result_node['message']
                 current_result['error'] = result_node['error']
         else:
@@ -121,7 +123,7 @@ def send_request_to_nodes(config_cluster, header, data, nodes, args):
     for t in threads:
         t.join()
     for node, result_node in result_nodes.iteritems():
-        result = append_node_result_by_type(node, result_node, header, result)
+        result = append_node_result_by_type(node=node, result_node=result_node, request_type=header, current_result=result)
     return result
 
 
@@ -169,6 +171,29 @@ def prepare_message(request_type, node_agents={}, args=[]):
 
     nodes = node_agents.keys()
     return header, data, nodes
+
+
+def get_dict_nodes(nodes):
+    """
+    Get a dictionary of affected nodes.
+    :param agent_id: Node name or id or list of nodes.
+    :return: Dictionary of nodes
+        - Node 192.168.56.103: {'192.168.56.103': []}.
+        - All nodes: {}.
+    """
+    node_agents = {}
+    if nodes:
+        if not isinstance(nodes, list):
+            nodes = [nodes]
+        for node in nodes:
+            # Is name or addr?
+            if not re.compile(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$").match(node):
+                addr = get_ip_from_name(node)
+                if addr != None:
+                    node_agents[addr] = []
+            else:
+                node_agents[node] = []
+    return node_agents
 
 
 def distributed_api_request(request_type, node_agents={}, args=[], from_cluster=False, instance=None):
@@ -226,15 +251,15 @@ def distributed_api_request(request_type, node_agents={}, args=[], from_cluster=
     return result
 
 
-def get_config_distributed(node_id=None, cluster_depth=1):
-    if is_a_local_request() or cluster_depth <= 0:
+def get_config_distributed(node_id=None, from_cluster=False):
+    if is_a_local_request() or from_cluster:
         return read_config_json()
     else:
         if not is_cluster_running():
             raise WazuhException(3015)
 
         request_type = api_protocol.list_requests_cluster['CLUSTER_CONFIG']
-        return distributed_api_request(request_type=request_type, cluster_depth=cluster_depth, affected_nodes=node_id)
+        return distributed_api_request(request_type=request_type, node_agents=get_dict_nodes(node_id))
 
 
 def execute_request(request_type, args=[], agents={}, instance=None):
@@ -244,7 +269,33 @@ def execute_request(request_type, args=[], agents={}, instance=None):
 
     if request_type == api_protocol.list_requests_agents['RESTART_AGENTS']:
         result = instance.restart_agents(agent_id=agents, restart_all=args[0])
+
+    elif request_type == api_protocol.list_requests_managers['MANAGERS_INFO']:
+        result = instance.request_get_ossec_init(from_cluster=True)
+
+    elif request_type == api_protocol.list_requests_managers['MANAGERS_STATUS']:
+        result = instance.request_status(from_cluster=True)
+
     '''
+    elif request_type == api_protocol.list_requests_managers['MANAGERS_OSSEC_CONF']:
+        result = instance.request_get_ossec_conf(section=args[0], field=args[1], from_cluster=True)
+
+    elif request_type == api_protocol.list_requests_managers['MANAGERS_LOGS']:
+        result = instance.request_ossec_log(type_log=args[0], category=args[1], months=args[2], \
+              offset=args[3], limit=args[4], sort=args[5], search=args[6], cluster_depth=args[7])
+
+    elif request_type == api_protocol.list_requests_managers['MANAGERS_LOGS_SUMMARY']:
+        result = instance.managers_ossec_log_summary(months=args[0])
+
+    elif request_type == api_protocol.list_requests_stats['MANAGERS_STATS_TOTALS']:
+        result = instance.totals(year=args[0], month=args[1], day=args[2])
+
+    elif request_type == api_protocol.list_requests_stats['MANAGERS_STATS_HOURLY']:
+        result = instance.hourly()
+
+    elif request_type == api_protocol.list_requests_stats['MANAGERS_STATS_WEEKLY']:
+        result = instance.weekly()
+
     elif request_type == api_protocol.list_requests_agents['AGENTS_UPGRADE_RESULT']:
         result = instance.get_upgrade_result(agent=agents, timeout=args[0])
 
@@ -278,32 +329,8 @@ def execute_request(request_type, args=[], agents={}, instance=None):
 
     elif request_type == api_protocol.list_requests_rootcheck['ROOTCHECK_CLEAR']:
         result = instance.clear(agents=agents, all_agents=args[0])
-
-    elif request_type == api_protocol.list_requests_managers['MANAGERS_STATUS']:
-        result = instance.managers_status()
-
-    elif request_type == api_protocol.list_requests_managers['MANAGERS_LOGS']:
-        result = instance.managers_ossec_log(type_log=args[0], category=args[1], months=args[2], \
-              offset=args[3], limit=args[4], sort=args[5], search=args[6], cluster_depth=args[7])
-
-    elif request_type == api_protocol.list_requests_managers['MANAGERS_LOGS_SUMMARY']:
-        result = instance.managers_ossec_log_summary(months=args[0])
-
-    elif request_type == api_protocol.list_requests_stats['MANAGERS_STATS_TOTALS']:
-        result = instance.totals(year=args[0], month=args[1], day=args[2])
-
-    elif request_type == api_protocol.list_requests_stats['MANAGERS_STATS_HOURLY']:
-        result = instance.hourly()
-
-    elif request_type == api_protocol.list_requests_stats['MANAGERS_STATS_WEEKLY']:
-        result = instance.weekly()
-
-    elif request_type == api_protocol.list_requests_managers['MANAGERS_OSSEC_CONF']:
-        result = instance.managers_get_ossec_conf(section=args[0], field=args[1])
-
-    elif request_type == api_protocol.list_requests_wazuh['MANAGERS_INFO']:
-        result = instance.managers_get_ossec_init()
-
+    '''
+    '''
     elif request_type == api_protocol.list_requests_cluster['CLUSTER_CONFIG']:
         result = get_config_distributed()
 

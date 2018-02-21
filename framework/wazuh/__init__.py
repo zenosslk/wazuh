@@ -135,6 +135,5 @@ class Wazuh:
 
         return self.to_dict()
 
-
 def main():
     print("Wazuh HIDS Library")

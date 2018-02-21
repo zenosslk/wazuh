@@ -37,7 +37,7 @@ try:
         from wazuh import Wazuh
 
         # Initialize framework
-        myWazuh = Wazuh(get_init=True)
+        # myWazuh = Wazuh(get_init=True)
 
         from wazuh.common import *
         from wazuh.cluster.management import *
@@ -74,8 +74,6 @@ def get_instance(request_type):
     instance = None
     if request_type in list_requests_agents.values():
         instance = Agent
-    if request_type in list_requests_wazuh.values():
-        instance = myWazuh
     if request_type in list_requests_stats.values():
         instance = stats
     if request_type in list_requests_syscheck.values():

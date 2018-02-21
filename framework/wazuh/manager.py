@@ -4,6 +4,8 @@
 # This program is a free software; you can redistribute it and/or modify it under the terms of GPLv2
 
 from wazuh.utils import execute, previous_month, cut_array, sort_array, search_array, tail
+from wazuh.cluster.distributed_api import is_a_local_request, distributed_api_request, is_cluster_running, get_dict_nodes
+from wazuh.cluster.api_protocol_messages import list_requests_managers
 from wazuh import common
 from datetime import datetime
 import time
@@ -11,7 +13,9 @@ from os.path import exists
 from glob import glob
 import re
 import hashlib
+from wazuh import Wazuh
 
+myWazuh = Wazuh(get_init=True)
 
 def status():
     """
@@ -19,9 +23,9 @@ def status():
     :return: Array of dictionaries (keys: status, daemon).
     """
 
-    processes = ['ossec-monitord', 'ossec-logcollector', 'ossec-remoted', 
-                 'ossec-syscheckd', 'ossec-analysisd', 'ossec-maild', 
-                 'ossec-execd', 'wazuh-modulesd', 'ossec-authd', 
+    processes = ['ossec-monitord', 'ossec-logcollector', 'ossec-remoted',
+                 'ossec-syscheckd', 'ossec-analysisd', 'ossec-maild',
+                 'ossec-execd', 'wazuh-modulesd', 'ossec-authd',
                  'wazuh-clusterd']
 
     data = {}
@@ -160,3 +164,37 @@ def ossec_log_summary(months=3):
             else:
                 continue
     return categories
+
+
+def request_get_ossec_init(node_id=None, from_cluster=False):
+    if is_a_local_request() or from_cluster:
+        return myWazuh.get_ossec_init()
+    else:
+        if not is_cluster_running():
+            raise WazuhException(3015)
+
+        request_type = list_requests_managers['MANAGERS_INFO']
+        return distributed_api_request(request_type=request_type, node_agents=get_dict_nodes(node_id))
+
+
+def request_status(node_id=None, from_cluster=False):
+    if is_a_local_request() or from_cluster:
+        return status()
+    else:
+        if not is_cluster_running():
+            raise WazuhException(3015)
+
+        request_type = list_requests_managers['MANAGERS_STATUS']
+        return distributed_api_request(request_type=request_type, node_agents=get_dict_nodes(node_id))
+
+
+
+def request_get_ossec_conf(section=None, field=None, node_id=None, from_cluster=False):
+    if is_a_local_request() or from_cluster:
+        return get_ossec_conf()
+    else:
+        if not is_cluster_running():
+            raise WazuhException(3015)
+
+    request_type = list_requests_managers['MANAGERS_OSSEC_CONF']
+    return distributed_api_request(request_type=request_type, node_agents=get_dict_nodes(node_id))

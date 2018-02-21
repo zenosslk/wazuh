@@ -3,15 +3,16 @@
 # Created by Wazuh, Inc. <info@wazuh.com>.
 # This program is a free software; you can redistribute it and/or modify it under the terms of GPLv2
 from wazuh.exception import WazuhException
-from wazuh.manager import status
 from wazuh.configuration import get_ossec_conf
 from wazuh.InputValidator import InputValidator
 from wazuh.cluster.api_protocol_messages import all_list_requests
+from wazuh.configuration import get_ossec_conf
 from wazuh import common
 from subprocess import check_output
 from datetime import datetime
 from time import sleep
 # from os import strerror
+from glob import glob
 from operator import eq
 import json
 from sys import version
@@ -148,21 +149,27 @@ def send_request(host, port, key, data, file=None):
     return error, data
 
 def get_status_json():
+    def check_if_the_cluster_is_running():
+        return glob("{0}/var/run/{1}-*.pid".format(common.ossec_path, 'wazuh-clusterd')) != []
+
     return {"enabled": "yes" if check_cluster_status() else "no",
-            "running": "yes" if status()['wazuh-clusterd'] == 'running' else "no"}
+            "running": "yes" if check_if_the_cluster_is_running() else "no"}
 
 
 def check_cluster_cmd(cmd, node_type):
     # cmd must be a list
     if not isinstance(cmd, list):
+        logging.error("'{0}' is not istance of list".format(cmd))
         return False
 
     # check cmd len list
     if len(cmd) != 2 and len(cmd) != 3:
+        logging.error("'{0}' too many commands received.".format(cmd))
         return False
 
     # check cmd len
     if len(' '.join(cmd)) != common.cluster_protocol_plain_size:
+        logging.error("'{0}' it's too big. Max lenght allowed for commands: {1}".format(cmd, common.cluster_protocol_plain_size))
         return False
 
     # 'ready' cmd can only be sent by a master node to a client node
@@ -174,6 +181,7 @@ def check_cluster_cmd(cmd, node_type):
 
     # check command type
     if not cmd[0] in ['zip', 'node'] and not cmd[0] in all_list_requests.values():
+        logging.error("'{0}' it is not a valid command.".format(cmd))
         return False
 
     # second argument of zip is a number

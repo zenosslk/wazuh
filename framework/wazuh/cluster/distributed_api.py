@@ -6,12 +6,12 @@
 from wazuh.cluster.management import send_request, read_config, check_cluster_status, get_node, get_nodes, get_status_json, get_name_from_ip, get_ip_from_name
 from wazuh.cluster import api_protocol_messages as api_protocol
 from wazuh.exception import WazuhException
-
 import wazuh.manager as manager
 import wazuh.stats as stats
+import wazuh.syscheck as syscheck
+import wazuh.rootcheck as rootcheck
 from wazuh.agent import Agent
 from wazuh import Wazuh
-
 from wazuh import common
 import threading
 from sys import version
@@ -268,13 +268,12 @@ def get_config_distributed(node_id=None, from_cluster=False):
 
 def execute_request(request_type, args={}, agents={}):
     result = ""
-    
+
     my_wazuh = Wazuh()
 
     logging.warning("Data received --> request_type --> {}  ---  args --> {}  ---  agents --> {}".format(str(request_type), str(args), str(agents))) #TODO: Remove this line.
 
     functions = {
-        api_protocol.list_requests_agents['RESTART_AGENTS']: Agent.restart_agents,
         api_protocol.list_requests_managers['MANAGERS_INFO']: my_wazuh.get_ossec_init,
         api_protocol.list_requests_managers['MANAGERS_STATUS']: manager.status,
         api_protocol.list_requests_managers['MANAGERS_OSSEC_CONF']: manager.get_ossec_conf,
@@ -282,76 +281,21 @@ def execute_request(request_type, args={}, agents={}):
         api_protocol.list_requests_managers['MANAGERS_LOGS_SUMMARY']: manager.ossec_log_summary,
         api_protocol.list_requests_stats['MANAGERS_STATS_TOTALS']: stats.totals,
         api_protocol.list_requests_stats['MANAGERS_STATS_HOURLY']: stats.hourly,
-        api_protocol.list_requests_stats['MANAGERS_STATS_WEEKLY']: stats.weekly
+        api_protocol.list_requests_stats['MANAGERS_STATS_WEEKLY']: stats.weekly,
+        api_protocol.list_requests_agents['RESTART_AGENTS']: Agent.restart_agents,
+        api_protocol.list_requests_agents['AGENTS_UPGRADE_RESULT']: Agent.get_upgrade_result,
+        api_protocol.list_requests_agents['AGENTS_UPGRADE']: Agent.upgrade_agent,
+        api_protocol.list_requests_agents['AGENTS_UPGRADE_CUSTOM']: Agent.upgrade_agent_custom,
+        api_protocol.list_requests_agents['SYSCHECK_LAST_SCAN']: syscheck.last_scan,
+        api_protocol.list_requests_agents['SYSCHECK_RUN']: syscheck.run,
+        api_protocol.list_requests_agents['SYSCHECK_CLEAR']: syscheck.clear,
+        api_protocol.list_requests_agents['ROOTCHECK_PCI']: rootcheck.get_pci,
+        api_protocol.list_requests_agents['ROOTCHECK_CIS']: rootcheck.get_cis,
+        api_protocol.list_requests_agents['ROOTCHECK_RUN']: rootcheck.run,
+        api_protocol.list_requests_agents['ROOTCHECK_CLEAR']: rootcheck.clear,
+        api_protocol.list_requests_agents['CLUSTER_CONFIG']: read_config
     }
 
-    '''
-    if request_type == api_protocol.list_requests_agents['RESTART_AGENTS']:
-        result = instance.restart_agents(agent_id=agents, restart_all=args['restart_all'])
-
-    elif request_type == api_protocol.list_requests_managers['MANAGERS_INFO']:
-        result = instance.request_get_ossec_init(from_cluster=True)
-
-    elif request_type == api_protocol.list_requests_managers['MANAGERS_STATUS']:
-        result = instance.request_status(from_cluster=True)
-
-    elif request_type == api_protocol.list_requests_managers['MANAGERS_OSSEC_CONF']:
-        result = instance.request_get_ossec_conf(section=args['section'], field=args['field'], from_cluster=True)
-
-    elif request_type == api_protocol.list_requests_managers['MANAGERS_LOGS']:
-        result = instance.request_ossec_log(type_log=args['type_log'], category=args['category'], months=args['months'], \
-              offset=args['offset'], limit=args['limit'], sort=args['sort'], search=args['search'], from_cluster=True)
-
-    elif request_type == api_protocol.list_requests_managers['MANAGERS_LOGS_SUMMARY']:
-        result = instance.request_ossec_log_summary(months=args['months'], from_cluster=True)
-
-    elif request_type == api_protocol.list_requests_stats['MANAGERS_STATS_TOTALS']:
-        result = instance.request_totals(year=args['year'], month=args['month'], day=args[2], from_cluster=True)
-
-    elif request_type == api_protocol.list_requests_stats['MANAGERS_STATS_HOURLY']:
-        result = instance.request_hourly(from_cluster=True)
-
-    elif request_type == api_protocol.list_requests_stats['MANAGERS_STATS_WEEKLY']:
-        result = instance.request_weekly(from_cluster=True)
-
-    elif request_type == api_protocol.list_requests_agents['AGENTS_UPGRADE_RESULT']:
-        result = instance.get_upgrade_result(agent=agents, timeout=args[0])
-
-    elif request_type == api_protocol.list_requests_agents['AGENTS_UPGRADE']:
-        result = instance.upgrade_agent(agent_id=agents, wpk_repo=args[0], \
-             version=args[1], force=args[2], chunk_size=args[3])
-
-    elif request_type == api_protocol.list_requests_agents['AGENTS_UPGRADE_CUSTOM']:
-        result = instance.upgrade_agent_custom(agent_id=agents, file_path=args[0], installer=args[1])
-
-    elif request_type == api_protocol.list_requests_syscheck['SYSCHECK_LAST_SCAN']:
-        result = instance.last_scan(args[0])
-
-    elif request_type == api_protocol.list_requests_syscheck['SYSCHECK_RUN']:
-        result = instance.run(agents=agents, all_agents=args[0])
-
-    elif request_type == api_protocol.list_requests_syscheck['SYSCHECK_CLEAR']:
-        result = instance.clear(agents=agents, all_agents=args[0])
-
-    elif request_type == api_protocol.list_requests_rootcheck['ROOTCHECK_PCI']:
-        result = instance.get_pci(agents=agents, offset=args[0], limit=args[1], sort=args[2], search=args[3])
-
-    elif request_type == api_protocol.list_requests_rootcheck['ROOTCHECK_CIS']:
-        result = instance.get_cis(agents=agents, offset=args[0], limit=args[1], sort=args[2], search=args[3])
-    elif request_type == api_protocol.list_requests_rootcheck['ROOTCHECK_LAST_SCAN']:
-        result = instance.last_scan(args[0])
-
-    elif request_type == api_protocol.list_requests_rootcheck['ROOTCHECK_RUN']:
-        result = instance.run(agents=agents, all_agents=args[0])
-
-    elif request_type == api_protocol.list_requests_rootcheck['ROOTCHECK_CLEAR']:
-        result = instance.clear(agents=agents, all_agents=args[0])
-    '''
-    '''
-    elif request_type == api_protocol.list_requests_cluster['CLUSTER_CONFIG']:
-        result = get_config_distributed()
-
-    '''
     return received_request(kwargs=args, request_function=functions[request_type],
                             request_type=request_type, from_cluster=True)
 

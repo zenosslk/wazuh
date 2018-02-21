@@ -10,8 +10,6 @@ from wazuh.ossec_socket import OssecSocket
 from wazuh.database import Connection
 from wazuh.wdb import WazuhDBConnection
 from wazuh.InputValidator import InputValidator
-from wazuh.cluster.distributed_api import is_a_local_request, is_cluster_running, distributed_api_request
-from wazuh.cluster.api_protocol_messages import list_requests_agents
 from wazuh import manager
 from wazuh import common
 from glob import glob

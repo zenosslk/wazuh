@@ -37,7 +37,7 @@ try:
         from wazuh import Wazuh
 
         # Initialize framework
-        # myWazuh = Wazuh(get_init=True)
+        myWazuh = Wazuh(get_init=True)
 
         from wazuh.common import *
         from wazuh.cluster.management import *
@@ -47,11 +47,6 @@ try:
         from wazuh.exception import WazuhException
         from wazuh.utils import check_output
         from wazuh.pyDaemonModule import pyDaemon, create_pid, delete_pid
-        from wazuh.agent import Agent
-        import wazuh.syscheck as syscheck
-        import wazuh.rootcheck as rootcheck
-        import wazuh.stats as stats
-        import wazuh.manager as manager
     except Exception as e:
         print("Error importing 'Wazuh' package.\n\n{0}\n".format(e))
         exit()
@@ -69,20 +64,6 @@ try:
 except:
     print("wazuh-clusterd: Python 2.7 required. Exiting.")
     exit()
-
-def get_instance(request_type):
-    instance = None
-    if request_type in list_requests_agents.values():
-        instance = Agent
-    if request_type in list_requests_stats.values():
-        instance = stats
-    if request_type in list_requests_syscheck.values():
-        instance = syscheck
-    if request_type in list_requests_rootcheck.values():
-        instance = rootcheck
-    if request_type in list_requests_managers.values():
-        instance = manager
-    return instance
 
 class WazuhClusterHandler(asynchat.async_chat):
     def __init__(self, sock, addr, key, node_type, requests_queue, finished_clients, restart_after_sync, connected_clients):
@@ -153,10 +134,9 @@ class WazuhClusterHandler(asynchat.async_chat):
 
             elif message == api_protocol.all_list_requests['DISTRIBUTED_REQUEST']:
                 api_request_type = self.command[1]
-                instance = get_instance(api_request_type)
                 data = json.loads(self.f.decrypt(response[common.cluster_sync_msg_size:]))
                 agents = {}
-                args = []
+                args = {}
 
                 if data.get(api_protocol.protocol_messages['REQUEST_TYPE']):
                     api_request_type = data[api_protocol.protocol_messages['REQUEST_TYPE']]
@@ -166,7 +146,7 @@ class WazuhClusterHandler(asynchat.async_chat):
                     args = data[api_protocol.protocol_messages['ARGS']]
 
                 try:
-                    res = execute_request(request_type=api_request_type, args=args, agents=agents, instance=instance)
+                    res = execute_request(request_type=api_request_type, args=args, agents=agents)
                 except Exception as e:
                     res = e
 

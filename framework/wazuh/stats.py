@@ -4,8 +4,6 @@
 # This program is a free software; you can redistribute it and/or modify it under the terms of GPLv2
 
 from wazuh.exception import WazuhException
-from wazuh.cluster.distributed_api import is_a_local_request, distributed_api_request, is_cluster_running, get_dict_nodes
-from wazuh.cluster.api_protocol_messages import list_requests_stats
 from wazuh import common
 
 DAYS = "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"

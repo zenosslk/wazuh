@@ -58,7 +58,7 @@ list_requests_stats = {
 
 list_requests_cluster = {
     'DISTRIBUTED_REQUEST'   : 'distributed',
-    'CLUSTER_CONFIG'        : 'cluster_config',
+    'CLUSTER_CONFIG'        : '/cluster/config',
     'MASTER_FORW'           : 'master_forward',
     'zip'                   : 'zip',
     'node'                  : 'node',

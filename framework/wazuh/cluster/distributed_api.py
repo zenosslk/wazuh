@@ -266,10 +266,10 @@ def get_config_distributed(node_id=None, from_cluster=False):
         return distributed_api_request(request_type=request_type, node_agents=get_dict_nodes(node_id))
 
 
-def get_node_agent():
+def get_node_agent(agent_id):
     data = None
     try:
-        node_name = Agent(id).get_basic_information()['node_name']
+        node_name = Agent(agent_id).get_basic_information()['node_name']
         data = get_ip_from_name(node_name)
     except Exception as e:
         data = None
@@ -288,13 +288,13 @@ def get_agents_by_node(agent_id):
     node_agents = {}
     if isinstance(agent_id, list):
         for id in agent_id:
-            addr = Agent(id).get_node_agent()
+            addr = get_node_agent(id)
             if node_agents.get(addr) is None:
                 node_agents[addr] = []
             node_agents[addr].append(str(id).zfill(3))
     else:
         if agent_id is not None:
-            node_agents[Agent(agent_id).get_node_agent()] = [str(agent_id).zfill(3)]
+            node_agents[get_node_agent(agent_id)] = [str(agent_id).zfill(3)]
     return node_agents
 
 

@@ -167,7 +167,9 @@ def prepare_message(request_type, node_agents={}, args=[]):
         request_redirected = args.pop()
         data[node][api_protocol.protocol_messages['REQUEST_TYPE']] = request_type
         data[node][api_protocol.protocol_messages['NODEAGENTS']] = node_agents
+        logging.warning("args='" + str(args)) #TODO: Remove this line.
         data[node][api_protocol.protocol_messages['ARGS']] = args
+        logging.warning("data[node][api_protocol.protocol_messages['ARGS']]='" + str(data[node][api_protocol.protocol_messages['ARGS']])) #TODO: Remove this line.
 
     nodes = node_agents.keys()
     return header, data, nodes
@@ -238,9 +240,7 @@ def distributed_api_request(request_type, node_agents={}, args=[], from_cluster=
     '''
 
     if len(data) > 0:
-        logging.warning("distributed_api_request: Sending request") #TODO: Remove this line.
         result = send_request_to_nodes(config_cluster=config_cluster, header=header, data=data, nodes=nodes, args=args)
-        logging.warning("distributed_api_request: result=" + str(result)) #TODO: Remove this line.
 
     # Merge local and distributed results
     '''
@@ -276,26 +276,26 @@ def execute_request(request_type, args=[], agents={}, instance=None):
     elif request_type == api_protocol.list_requests_managers['MANAGERS_STATUS']:
         result = instance.request_status(from_cluster=True)
 
-    '''
     elif request_type == api_protocol.list_requests_managers['MANAGERS_OSSEC_CONF']:
         result = instance.request_get_ossec_conf(section=args[0], field=args[1], from_cluster=True)
 
     elif request_type == api_protocol.list_requests_managers['MANAGERS_LOGS']:
         result = instance.request_ossec_log(type_log=args[0], category=args[1], months=args[2], \
-              offset=args[3], limit=args[4], sort=args[5], search=args[6], cluster_depth=args[7])
+              offset=args[3], limit=args[4], sort=args[5], search=args[6], from_cluster=True)
 
     elif request_type == api_protocol.list_requests_managers['MANAGERS_LOGS_SUMMARY']:
-        result = instance.managers_ossec_log_summary(months=args[0])
+        result = instance.request_ossec_log_summary(months=args[0], from_cluster=True)
 
     elif request_type == api_protocol.list_requests_stats['MANAGERS_STATS_TOTALS']:
-        result = instance.totals(year=args[0], month=args[1], day=args[2])
+        result = instance.request_totals(year=args[0], month=args[1], day=args[2], from_cluster=True)
 
     elif request_type == api_protocol.list_requests_stats['MANAGERS_STATS_HOURLY']:
-        result = instance.hourly()
+        result = instance.request_hourly(from_cluster=True)
 
     elif request_type == api_protocol.list_requests_stats['MANAGERS_STATS_WEEKLY']:
-        result = instance.weekly()
+        result = instance.request_weekly(from_cluster=True)
 
+    '''
     elif request_type == api_protocol.list_requests_agents['AGENTS_UPGRADE_RESULT']:
         result = instance.get_upgrade_result(agent=agents, timeout=args[0])
 

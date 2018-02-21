@@ -4,6 +4,8 @@
 # This program is a free software; you can redistribute it and/or modify it under the terms of GPLv2
 
 from wazuh.exception import WazuhException
+from wazuh.cluster.distributed_api import is_a_local_request, distributed_api_request, is_cluster_running, get_dict_nodes
+from wazuh.cluster.api_protocol_messages import list_requests_stats
 from wazuh import common
 
 DAYS = "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"
@@ -147,3 +149,37 @@ def weekly():
         response[DAYS[i]] = {'hours': hours, 'interactions': interactions}
 
     return response
+
+
+def request_totals(year, month, day, node_id=None, from_cluster=False):
+    if is_a_local_request() or from_cluster:
+        return totals(year, month, day)
+    else:
+        if not is_cluster_running():
+            raise WazuhException(3015)
+
+    request_type = list_requests_stats['MANAGERS_STATS_TOTALS']
+    args = [year, month, day]
+    return distributed_api_request(request_type=request_type, node_agents=get_dict_nodes(node_id), args=args)
+
+
+def request_hourly(node_id=None, from_cluster=False):
+    if is_a_local_request() or from_cluster:
+        return hourly()
+    else:
+        if not is_cluster_running():
+            raise WazuhException(3015)
+
+    request_type = list_requests_stats['MANAGERS_STATS_HOURLY']
+    return distributed_api_request(request_type=request_type, node_agents=get_dict_nodes(node_id))
+
+
+def request_weekly(node_id=None, from_cluster=False):
+    if is_a_local_request() or from_cluster:
+        return weekly()
+    else:
+        if not is_cluster_running():
+            raise WazuhException(3015)
+
+    request_type = list_requests_stats['MANAGERS_STATS_WEEKLY']
+    return distributed_api_request(request_type=request_type, node_agents=get_dict_nodes(node_id))

@@ -6,6 +6,7 @@
 from wazuh.utils import execute, previous_month, cut_array, sort_array, search_array, tail
 from wazuh.cluster.distributed_api import is_a_local_request, distributed_api_request, is_cluster_running, get_dict_nodes
 from wazuh.cluster.api_protocol_messages import list_requests_managers
+from wazuh.configuration import get_ossec_conf
 from wazuh import common
 from datetime import datetime
 import time
@@ -188,13 +189,37 @@ def request_status(node_id=None, from_cluster=False):
         return distributed_api_request(request_type=request_type, node_agents=get_dict_nodes(node_id))
 
 
-
 def request_get_ossec_conf(section=None, field=None, node_id=None, from_cluster=False):
     if is_a_local_request() or from_cluster:
-        return get_ossec_conf()
+        return get_ossec_conf(section, field)
     else:
         if not is_cluster_running():
             raise WazuhException(3015)
 
     request_type = list_requests_managers['MANAGERS_OSSEC_CONF']
-    return distributed_api_request(request_type=request_type, node_agents=get_dict_nodes(node_id))
+    args = [section, field]
+    return distributed_api_request(request_type=request_type, node_agents=get_dict_nodes(node_id), args=args)
+
+
+def request_ossec_log(type_log='all', category='all', months=3, offset=0, limit=common.database_limit, sort=None, search=None, node_id=None, from_cluster=False):
+    if is_a_local_request() or from_cluster:
+        return ossec_log(type_log, category, months, offset, limit, sort, search)
+    else:
+        if not is_cluster_running():
+            raise WazuhException(3015)
+
+    request_type = list_requests_managers['MANAGERS_LOGS']
+    args = [type_log, category, months, offset, limit, sort, search]
+    return distributed_api_request(request_type=request_type, node_agents=get_dict_nodes(node_id), args=args)
+
+
+def request_ossec_log_summary(months=3, node_id=None, from_cluster=False):
+    if is_a_local_request() or from_cluster:
+        return ossec_log_summary(months)
+    else:
+        if not is_cluster_running():
+            raise WazuhException(3015)
+
+    request_type = list_requests_managers['MANAGERS_LOGS_SUMMARY']
+    args = [months]
+    return distributed_api_request(request_type=request_type, node_agents=get_dict_nodes(node_id), args=args)

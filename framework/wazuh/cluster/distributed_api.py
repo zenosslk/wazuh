@@ -333,7 +333,8 @@ def execute_request(request_type, args={}, agents={}):
 
 
 def received_request(kwargs, request_function, request_type, from_cluster=False):
-    if is_a_local_request() or from_cluster:
+    if not request_type in api_protocol.all_list_requests.values() or \
+            is_a_local_request() or from_cluster:
         return request_function(**kwargs)
     else:
         if not is_cluster_running():

@@ -355,4 +355,4 @@ def received_request(kwargs, request_function, request_type, from_cluster=False)
         if not is_cluster_running():
             raise WazuhException(3015)
 
-    return distributed_api_request(request_type=request_type, node_agents=node_agents, args=kwargs)
+        return distributed_api_request(request_type=request_type, node_agents=node_agents, args=kwargs)

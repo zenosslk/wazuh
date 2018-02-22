@@ -215,7 +215,6 @@ def distributed_api_request(request_type, node_agents={}, args={}, from_cluster=
     :param instance: Instance for resolve local request.
     :return: Output of API distributed call in JSON.
     """
-    logging.warning("distributed_api_request: Received request_type='" + str(request_type) + "' node_agents='" + str(node_agents) + "' args='" + str(args) + "' from_cluster='" + str(from_cluster)) #TODO: Remove this line.
     config_cluster = read_config()
     result, result_local = None, None
 
@@ -227,8 +226,6 @@ def distributed_api_request(request_type, node_agents={}, args={}, from_cluster=
     '''
 
     header, data, nodes = prepare_message(request_type=request_type, node_agents=node_agents, args=args)
-    logging.warning("distributed_api_request: got message header='" + str(header) + "' data='" + str(data) + "' nodes='" + str(nodes)) #TODO: Remove this line.
-
 
     # Elected master resolves his own request in local
     '''
@@ -276,34 +273,38 @@ def get_node_agent(agent_id):
     return data
 
 
-def get_agents_by_node(agent_id):
+def get_all_agents_list():
+    return []
+
+
+def get_agents_by_node(agent_id="all"):
     """
     Get a dictionary of affected agents by node.
-    :param agent_id: Agent string or list of agents.
+    :param agent_id: Agent string or list of agents. "all" = All agents.
     :return: Dictionary of nodes -> list of agents. Sample:
         - Agent 003 and 004 in node 192.168.56.102: node_agents={'192.168.56.102': ['003', '004']},
         - Node 192.168.56.103 or all agents in node 192.168.56.103: {'192.168.56.103': []}.
         - All nodes: {}.
     """
     node_agents = {}
-    if isinstance(agent_id, list):
-        for id in agent_id:
-            addr = get_node_agent(id)
-            if node_agents.get(addr) is None:
-                node_agents[addr] = []
-            node_agents[addr].append(str(id).zfill(3))
-    else:
-        if agent_id is not None:
-            node_agents[get_node_agent(agent_id)] = [str(agent_id).zfill(3)]
+
+    if is not isinstance(agent_id, list) and agent_id is not None:
+        if agent_id == "all":
+            agent_id = get_all_agents_list()
+        else:
+            agent_id = [agent_id]
+
+    for id in agent_id:
+        addr = get_node_agent(id)
+        if node_agents.get(addr) is None:
+            node_agents[addr] = []
+        node_agents[addr].append(str(id).zfill(3))
+
     return node_agents
 
 
 def execute_request(request_type, args={}, agents={}):
-    result = ""
-
     my_wazuh = Wazuh()
-
-    logging.warning("Data received --> request_type --> {}  ---  args --> {}  ---  agents --> {}".format(str(request_type), str(args), str(agents))) #TODO: Remove this line.
 
     functions = {
         api_protocol.all_list_requests['MANAGERS_INFO']: my_wazuh.get_ossec_init,
@@ -326,6 +327,7 @@ def execute_request(request_type, args={}, agents={}):
         api_protocol.all_list_requests['AGENTS_UPGRADE_RESULT']: Agent.get_upgrade_result,
         api_protocol.all_list_requests['AGENTS_UPGRADE']: Agent.upgrade_agent,
         api_protocol.all_list_requests['AGENTS_UPGRADE_CUSTOM']: Agent.upgrade_agent_custom,
+        api_protocol.all_list_requests['GET_AGENTS']: Agent.get_agents_overview,
         api_protocol.all_list_requests['SYSCHECK_LAST_SCAN']: syscheck.last_scan,
         api_protocol.all_list_requests['SYSCHECK_RUN']: syscheck.run,
         api_protocol.all_list_requests['SYSCHECK_CLEAR']: syscheck.clear,

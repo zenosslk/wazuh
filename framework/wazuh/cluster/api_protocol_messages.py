@@ -14,6 +14,7 @@ protocol_messages = {
 
 # API Messages
 list_requests_agents = {
+    'GET_AGENTS'            : '/agents',
     'RESTART_AGENTS'        : 'PUT/agents/restart',
     'AGENTS_UPGRADE_RESULT' : '/agents/:agent_id/upgrade_result',
     'AGENTS_UPGRADE'        : 'PUT/agents/:agent_id/upgrade',

@@ -160,6 +160,15 @@ int prepare_db(sqlite3 *db, sqlite3_stmt **res, char *sql) {
             mterror_exit(DB_TAG, "Failed to create db table: %s", sqlite3_errmsg(db));
         }
 
+        char *create6 = "CREATE TABLE IF NOT EXISTS agent_node (" \
+                        "id_agent TEXT PRIMARY KEY," \
+                        "id_node TEXT NOT NULL)";
+        rc = sqlite3_exec(db, create6, NULL, NULL, NULL);
+        if (rc != SQLITE_OK) {
+            sqlite3_close(db);
+            mterror_exit(DB_TAG, "Failed to create db table: %s", sqlite3_errmsg(db));
+        }
+
         rc = sqlite3_prepare_v2(db, sql, -1, *(&res), 0);
         if (rc != SQLITE_OK) {
             sqlite3_close(db);
@@ -246,6 +255,11 @@ void* daemon_socket() {
     char *sql_sel_restart = "SELECT restarted FROM is_restarted";
     char *sql_del_restart = "DELETE FROM is_restarted";
     char *sql_ins_restart = "INSERT INTO is_restarted VALUES (?)";
+    // sql sentences to manage agent information table
+    char *sql_sel_node_agents = "SELECT id_agent FROM agent_node WHERE id_node = ?";
+    char *sql_sel_agent_node  = "SELECT id_node FROM agent_node WHERE id_agent = ?";
+    char *sql_ins_node = "INSERT INTO agent_node VALUES (?,?)";
+    char *sql_del_agent_node = "DELETE FROM agent_node WHERE id_agent = ?";
 
     char *sql;
     bool has1, has2, has3, select, count, select_last_sync, select_files, response_str;
@@ -367,8 +381,25 @@ void* daemon_socket() {
                 sql = sql_ins_restart;
                 has1 = true;
                 select_last_sync=true;
+            } else if (cmd != NULL && strcmp(cmd, "selnodeagents") == 0) {
+                sql = sql_sel_node_agents;
+                has1 = true;
+                response_str = true;
+            } else if (cmd != NULL && strcmp(cmd, "selagentnode") == 0) {
+                sql = sql_sel_agent_node;
+                has1 = true;
+                response_str = true;
+            } else if (cmd != NULL && strcmp(cmd, "insnodeagent") == 0) {
+                sql = sql_ins_node;
+                has1 = true;
+                has2 = true;
+            } else if (cmd != NULL && strcmp(cmd, "delagentnode") == 0) {
+                sql = sql_del_agent_node;
+                has1 = true;
             } else {
                 mtdebug1(DB_TAG,"Nothing to do");
+                if (snprintf(response, 10000, "Received unknown database command %s. Nothing to do", cmd) >= 10000)
+                    mterror(DB_TAG, "Overflow error in response string");
                 goto transaction_done;
             }
 
@@ -431,7 +462,8 @@ void* daemon_socket() {
                             sprintf(str, "%s*%s*%d ", (char *)sqlite3_column_text(res, 0), (char *)sqlite3_column_text(res, 1), sqlite3_column_int(res, 2));
                             strcat(response, str);
                         } else if (response_str) {
-                            strcpy(response, (char *)sqlite3_column_text(res,0));
+                            strcat(response, (char *)sqlite3_column_text(res,0));
+                            strcat(response, " ");
                         } else
                             strcpy(response, "Command OK");
                     } while (step == SQLITE_ROW || step == SQLITE_OK);

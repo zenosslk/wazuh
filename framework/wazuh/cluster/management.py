@@ -232,7 +232,7 @@ def read_config():
 
 
 def connect_to_db_socket(retry=False):
-    if not  check_cluster_status():
+    if not check_cluster_status():
         raise WazuhException(3013)
 
     cluster_socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -302,12 +302,12 @@ def get_nodes(updateDBname=False):
             continue
 
         if config_cluster['node_type'] == 'master' or \
-           response['type'] == 'master' or url == "localhost":
+           response['type'] == 'master' or response['localhost']:
             data.append({'url':url, 'node':response['node'], 'localhost': response['localhost'],
                          'status':'connected', 'cluster':response['cluster']})
 
             if updateDBname:
-                query = "insertname " +response['node'] + " " + url
+                query = "insertname " +response['node'] + " " + url + " " + response['type']
                 send_to_socket(cluster_socket, query)
                 receive_data_from_db_socket(cluster_socket)
 

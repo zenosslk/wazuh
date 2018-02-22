@@ -758,7 +758,7 @@ class Agent:
     @staticmethod
     def get_agents_overview(status="all", os_platform="all", os_version="all", manager_host="all",
                             offset=0, limit=common.database_limit, sort=None, search=None, select=None,
-                            version="all", agents="all"):
+                            version="all", agent_id="all"):
         """
         Gets a list of available agents with basic attributes.
 

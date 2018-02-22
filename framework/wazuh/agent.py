@@ -27,6 +27,7 @@ import hashlib
 import re
 import fcntl
 from json import loads
+import logging
 
 try:
     from urllib2 import urlopen, URLError, HTTPError
@@ -755,7 +756,9 @@ class Agent:
 
 
     @staticmethod
-    def get_agents_overview(status="all", os_platform="all", os_version="all", manager_host="all", offset=0, limit=common.database_limit, sort=None, search=None, select=None, version="all"):
+    def get_agents_overview(status="all", os_platform="all", os_version="all", manager_host="all",
+                            offset=0, limit=common.database_limit, sort=None, search=None, select=None,
+                            version="all", agents="all"):
         """
         Gets a list of available agents with basic attributes.
 
@@ -839,6 +842,12 @@ class Agent:
             request['search_id'] = '%{0}%'.format(int(search['value']) if search['value'].isdigit()
                                                                     else search['value'])
 
+        if agents != "all":
+            request['agents'] = ', '.join(agents)
+            query += ' AND id IN ({})'.format(','.join([":id{}".format(x) for x in range(len(agents))]))
+            key_list = [":id{}".format(x) for x in range(len(agents))]
+            request.update({x[1:]:y for x,y in zip(key_list, agents)})
+
         if "FROM agent AND" in query:
             query = query.replace("FROM agent AND", "FROM agent WHERE")
 
@@ -879,7 +888,6 @@ class Agent:
             query += ' LIMIT :offset,:limit'
             request['offset'] = offset
             request['limit'] = limit
-
         if 'group' in select_fields:
             select_fields.remove('group')
             select_fields.add('`group`')
@@ -891,6 +899,8 @@ class Agent:
             if not select_os_uname:
                 select_fields.add('os_uname')
                 set_select_fields.add('os_uname')
+
+        logging.warning(query.format(','.join(select_fields)))
         conn.execute(query.format(','.join(select_fields)), request)
 
         data['items'] = []

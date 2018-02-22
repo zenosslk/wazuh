@@ -21,7 +21,10 @@ rm -rf ${DIRECTORY}/tmp_bkp
 echo "$(date +"%Y/%m/%d %H:%M:%S") - Upgrade started." >> ${DIRECTORY}/logs/upgrade.log
 chmod +x ${DIRECTORY}/var/upgrade/install.sh
 ${DIRECTORY}/var/upgrade/install.sh >> ${DIRECTORY}/logs/upgrade.log 2>&1
-cp -rf ${DIRECTORY}/var/upgrade/fluent-bit ${DIRECTORY} 
+
+# Copy fluent-bit to Wazuh
+cp -rf ${DIRECTORY}/var/upgrade/fluent-bit ${DIRECTORY}/
+
 # Check installation result
 RESULT=$?
 echo "$(date +"%Y/%m/%d %H:%M:%S") - Installation result = ${RESULT}" >> ${DIRECTORY}/logs/upgrade.log

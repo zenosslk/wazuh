@@ -221,6 +221,12 @@ WriteLogs()
             echo "    <log_format>$LOG_FORMAT</log_format>" >> $NEWCONFIG
           fi
           echo "    <location>$FILE</location>" >>$NEWCONFIG
+
+          if [ "$FILE" = "messages" ] || [ "$FILE" = "syslog" ]; then
+            echo "    <target>fluentbit</target>" >>$NEWCONFIG
+          elif [ "$FILE" = "secure" ] || [ "$FILE" = "auth.log" ]; then
+            echo "    <target>agent,fluentbit</target>" >>$NEWCONFIG
+          fi
           echo "  </localfile>" >> $NEWCONFIG
           echo "" >> $NEWCONFIG
         fi

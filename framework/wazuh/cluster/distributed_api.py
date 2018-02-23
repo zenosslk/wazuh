@@ -34,6 +34,7 @@ def append_node_result_by_type(node, result_node, request_type, current_result=N
         request_type = request_type[1]
     if current_result is None:
         current_result = {}
+    '''
     if request_type == api_protocol.list_requests_agents['RESTART_AGENTS']:
         if isinstance(result_node.get('data'), dict):
             if result_node.get('data').get('affected_agents') != None:
@@ -81,6 +82,7 @@ def append_node_result_by_type(node, result_node, request_type, current_result=N
             current_result['totalItems'] = 0
         current_result['totalItems'] += 1
     else:
+
         if isinstance(result_node, dict):
             if not result_node.get('data') is None:
                 current_result = result_node['data']
@@ -89,6 +91,9 @@ def append_node_result_by_type(node, result_node, request_type, current_result=N
                 current_result['error'] = result_node['error']
         else:
             current_result = result_node
+    '''
+    current_result[node] = result_node
+
     return current_result
 
 
@@ -111,20 +116,11 @@ def send_request_to_nodes(config_cluster, header, data, nodes, args):
     result_queue = queue()
 
     for node in nodes:
-        if node is not None:
-            logging.info("Sending {0} request from {1} to {2} (Message: '{3}')".format(header, get_node()['node'], node, str(data[node])))
-            t = threading.Thread(target=send_request_to_node, args=(str(node), config_cluster, header, json.dumps(data[node]), result_queue))
-            threads.append(t)
-            t.start()
-            result_node = result_queue.get()
-        else:
-            result_node['data'] = {}
-            result_node['data']['failed_ids'] = []
-            for id in data[node][api_protocol.protocol_messages['NODEAGENTS']]:
-                res= {}
-                res['id'] = id
-                res['error'] = {'message':"Agent does not exist",'code':1701}
-                result_node['data']['failed_ids'].append(res)
+        logging.info("Sending {0} request from {1} to {2} (Message: '{3}')".format(header, get_node()['node'], node, str(data[node])))
+        t = threading.Thread(target=send_request_to_node, args=(str(node), config_cluster, header, json.dumps(data[node]), result_queue))
+        threads.append(t)
+        t.start()
+        result_node = result_queue.get()
         result_nodes[node] = result_node
     for t in threads:
         t.join()
@@ -181,7 +177,7 @@ def prepare_message(request_type, node_agents={}, args={}):
 
 def get_dict_nodes(nodes):
     """
-    Get a dictionary of affected nodes.
+    Get a dictionary of all nodes.
     :param agent_id: Node name or id or list of nodes.
     :return: Dictionary of nodes
         - Node 192.168.56.103: {'192.168.56.103': []}.
@@ -223,7 +219,6 @@ def distributed_api_request(request_type, node_agents={}, args={}, from_cluster=
         args.append(request_type)
         request_type = api_protocol.list_requests_cluster['MASTER_FORW']
     '''
-
     header, data, nodes = prepare_message(request_type=request_type, node_agents=node_agents, args=args)
 
     # Elected master resolves his own request in local
@@ -275,28 +270,6 @@ def get_node_agent(agent_id):
     return data
 
 
-def get_agents_by_node(agent_id):
-    """
-    Get a dictionary of affected agents by node.
-    :param agent_id: Agent string or list of agents.
-    :return: Dictionary of nodes -> list of agents. Sample:
-        - Agent 003 and 004 in node 192.168.56.102: node_agents={'192.168.56.102': ['003', '004']},
-        - Node 192.168.56.103 or all agents in node 192.168.56.103: {'192.168.56.103': []}.
-        - All nodes: {}.
-    """
-    node_agents = {}
-    if isinstance(agent_id, list):
-        for id in agent_id:
-            addr = get_node_agent(id)
-            if node_agents.get(addr) is None:
-                node_agents[addr] = []
-            node_agents[addr].append(str(id).zfill(3))
-    else:
-        if agent_id is not None:
-            node_agents[get_node_agent(agent_id)] = [str(agent_id).zfill(3)]
-    return node_agents
-
-
 def execute_request(request_type, args={}, agents={}, from_cluster=False):
     my_wazuh = Wazuh()
 
@@ -317,6 +290,8 @@ def execute_request(request_type, args={}, agents={}, from_cluster=False):
         api_protocol.all_list_requests['MANAGERS_STATS_TOTALS_NODE']: stats.totals,
         api_protocol.all_list_requests['MANAGERS_STATS_HOURLY_NODE']: stats.hourly,
         api_protocol.all_list_requests['MANAGERS_STATS_WEEKLY_NODE']: stats.weekly,
+        api_protocol.all_list_requests['GET_AGENTS']: Agent.get_agents_overview,
+        api_protocol.all_list_requests['RESTART_AGENTS_POST']: Agent.restart_agents,
         api_protocol.all_list_requests['RESTART_AGENTS']: Agent.restart_agents,
         api_protocol.all_list_requests['AGENTS_UPGRADE_RESULT']: Agent.get_upgrade_result,
         api_protocol.all_list_requests['AGENTS_UPGRADE']: Agent.upgrade_agent,
@@ -338,7 +313,7 @@ def execute_request(request_type, args={}, agents={}, from_cluster=False):
 def received_request(kwargs, request_function, request_type, from_cluster=False):
     node_agents = {}
     if kwargs.get('agent_id'):
-        node_agents = get_agents_by_node(kwargs['agent_id'])
+        node_agents = {}
     elif kwargs.get('node_id'):
         node_agents = get_dict_nodes(kwargs['node_id'])
         del kwargs['node_id']

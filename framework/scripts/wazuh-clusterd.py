@@ -138,6 +138,10 @@ class WazuhClusterHandler(asynchat.async_chat):
                 data = json.loads(self.f.decrypt(response[common.cluster_sync_msg_size:]))
                 agents = {}
                 args = {}
+                from_cluster=True
+
+                if api_request_type == api_protocol.all_list_requests['MASTER_FORW']:
+                    from_cluster=False
 
                 if data.get(api_protocol.protocol_messages['REQUEST_TYPE']):
                     api_request_type = data[api_protocol.protocol_messages['REQUEST_TYPE']]
@@ -146,8 +150,10 @@ class WazuhClusterHandler(asynchat.async_chat):
                 if data.get(api_protocol.protocol_messages['ARGS']):
                     args = data[api_protocol.protocol_messages['ARGS']]
 
+                logging.warning("clusterd: Received api_request_type='" + str(api_request_type) + "' agents='" + str(agents) + "' args='" + str(args)) #TODO: Remove this line.
+
                 try:
-                    res = execute_request(request_type=api_request_type, args=args, agents=agents)
+                    res = execute_request(request_type=api_request_type, args=args, agents=agents, from_cluster=from_cluster)
                 except Exception as e:
                     res = e
 

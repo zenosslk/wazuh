@@ -27,7 +27,6 @@ import hashlib
 import re
 import fcntl
 from json import loads
-import logging
 
 try:
     from urllib2 import urlopen, URLError, HTTPError
@@ -842,11 +841,10 @@ class Agent:
             request['search_id'] = '%{0}%'.format(int(search['value']) if search['value'].isdigit()
                                                                     else search['value'])
 
-        if agents != "all":
-            request['agents'] = ', '.join(agents)
-            query += ' AND id IN ({})'.format(','.join([":id{}".format(x) for x in range(len(agents))]))
-            key_list = [":id{}".format(x) for x in range(len(agents))]
-            request.update({x[1:]:y for x,y in zip(key_list, agents)})
+        if agent_id != "all":
+            query += ' AND id IN ({})'.format(','.join([":id{}".format(x) for x in range(len(agent_id))]))
+            key_list = [":id{}".format(x) for x in range(len(agent_id))]
+            request.update({x[1:]:y for x,y in zip(key_list, agent_id)})
 
         if "FROM agent AND" in query:
             query = query.replace("FROM agent AND", "FROM agent WHERE")
@@ -900,7 +898,6 @@ class Agent:
                 select_fields.add('os_uname')
                 set_select_fields.add('os_uname')
 
-        logging.warning(query.format(','.join(select_fields)))
         conn.execute(query.format(','.join(select_fields)), request)
 
         data['items'] = []

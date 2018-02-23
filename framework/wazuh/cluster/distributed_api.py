@@ -202,7 +202,7 @@ def get_dict_nodes(nodes):
     return node_agents
 
 
-def distributed_api_request(request_type, node_agents={}, args={}, from_cluster=False, instance=None):
+def distributed_api_request(request_type, node_agents={}, args={}, from_cluster=False):
     """
     Send distributed request using the cluster.
     :param request_type: Type of request. It have to be one of 'api_protocol_messages.all_list_requests'.
@@ -212,7 +212,6 @@ def distributed_api_request(request_type, node_agents={}, args={}, from_cluster=
         - All nodes: {}.
     :param args: List of arguments.
     :param from_cluster: Request comes from the cluster. If request is from cluster, it not be redirected.
-    :param instance: Instance for resolve local request.
     :return: Output of API distributed call in JSON.
     """
     config_cluster = read_config()
@@ -229,15 +228,18 @@ def distributed_api_request(request_type, node_agents={}, args={}, from_cluster=
 
     # Elected master resolves his own request in local
     '''
-    if (instance != None \
-        and get_actual_master()['name'] == config_cluster["node_name"] \
+    if (get_actual_master()['name'] == config_cluster["node_name"] \
         and get_ip_from_name(config_cluster["node_name"]) in node_agent):
-
+        node_local = get_ip_from_name(config_cluster["node_name"])
         try:
-            result_local = {'data':api_request(request_type=request_type, args=node_agents[get_ip_from_name(config_cluster["node_name"])], instance=instance), 'error':0}
+            result_local = {'data':execute_request(request_type=request_type,
+                            args=data[node_local][protocol_messages['ARGS']],
+                            agents=data[node_local][protocol_messages['NODEAGENTS']],
+                            from_cluster=True), 'error':0}
         except Exception as e:
             result_local = {'data':str(e), 'error':1}
-        del data[get_ip_from_name(config_cluster["node_name"])]
+        del data[node_local]
+        node_agents.remove('xyz');
     '''
 
     if len(data) > 0:
@@ -273,37 +275,29 @@ def get_node_agent(agent_id):
     return data
 
 
-def get_all_agents_list():
-    return []
-
-
-def get_agents_by_node(agent_id="all"):
+def get_agents_by_node(agent_id):
     """
     Get a dictionary of affected agents by node.
-    :param agent_id: Agent string or list of agents. "all" = All agents.
+    :param agent_id: Agent string or list of agents.
     :return: Dictionary of nodes -> list of agents. Sample:
         - Agent 003 and 004 in node 192.168.56.102: node_agents={'192.168.56.102': ['003', '004']},
         - Node 192.168.56.103 or all agents in node 192.168.56.103: {'192.168.56.103': []}.
         - All nodes: {}.
     """
     node_agents = {}
-
-    if is not isinstance(agent_id, list) and agent_id is not None:
-        if agent_id == "all":
-            agent_id = get_all_agents_list()
-        else:
-            agent_id = [agent_id]
-
-    for id in agent_id:
-        addr = get_node_agent(id)
-        if node_agents.get(addr) is None:
-            node_agents[addr] = []
-        node_agents[addr].append(str(id).zfill(3))
-
+    if isinstance(agent_id, list):
+        for id in agent_id:
+            addr = get_node_agent(id)
+            if node_agents.get(addr) is None:
+                node_agents[addr] = []
+            node_agents[addr].append(str(id).zfill(3))
+    else:
+        if agent_id is not None:
+            node_agents[get_node_agent(agent_id)] = [str(agent_id).zfill(3)]
     return node_agents
 
 
-def execute_request(request_type, args={}, agents={}):
+def execute_request(request_type, args={}, agents={}, from_cluster=False):
     my_wazuh = Wazuh()
 
     functions = {
@@ -327,7 +321,6 @@ def execute_request(request_type, args={}, agents={}):
         api_protocol.all_list_requests['AGENTS_UPGRADE_RESULT']: Agent.get_upgrade_result,
         api_protocol.all_list_requests['AGENTS_UPGRADE']: Agent.upgrade_agent,
         api_protocol.all_list_requests['AGENTS_UPGRADE_CUSTOM']: Agent.upgrade_agent_custom,
-        api_protocol.all_list_requests['GET_AGENTS']: Agent.get_agents_overview,
         api_protocol.all_list_requests['SYSCHECK_LAST_SCAN']: syscheck.last_scan,
         api_protocol.all_list_requests['SYSCHECK_RUN']: syscheck.run,
         api_protocol.all_list_requests['SYSCHECK_CLEAR']: syscheck.clear,
@@ -339,7 +332,7 @@ def execute_request(request_type, args={}, agents={}):
     }
 
     return received_request(kwargs=args, request_function=functions[request_type],
-                            request_type=request_type, from_cluster=True)
+                            request_type=request_type, from_cluster=from_cluster)
 
 
 def received_request(kwargs, request_function, request_type, from_cluster=False):

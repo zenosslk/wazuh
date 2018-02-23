@@ -6,16 +6,9 @@
 from wazuh.cluster.management import send_request, read_config, check_cluster_status, get_node, get_nodes, get_status_json, get_name_from_ip, get_ip_from_name
 from wazuh.cluster import api_protocol_messages as api_protocol
 from wazuh.exception import WazuhException
-import wazuh.manager as manager
-import wazuh.stats as stats
-import wazuh.syscheck as syscheck
-import wazuh.rootcheck as rootcheck
-from wazuh.agent import Agent
-from wazuh import Wazuh
 from wazuh import common
 import threading
 from sys import version
-import logging
 import re
 import ast
 import json
@@ -30,12 +23,13 @@ else:
 
 def append_node_result_by_type(node, result_node, request_type, current_result=None):
     request_type = request_type.split(' ')
-    if request_type > 1 and request_type[0] == api_protocol.list_requests_cluster['DISTRIBUTED_REQUEST']:
+    if request_type > 1 and request_type[0] == api_protocol.protocol_messages['DISTRIBUTED_REQUEST']:
         request_type = request_type[1]
     if current_result is None:
         current_result = {}
+
     '''
-    if request_type == api_protocol.list_requests_agents['RESTART_AGENTS']:
+    if 'restart' in request_type:
         if isinstance(result_node.get('data'), dict):
             if result_node.get('data').get('affected_agents') != None:
                 if current_result.get('affected_agents') is None:
@@ -57,10 +51,10 @@ def append_node_result_by_type(node, result_node, request_type, current_result=N
             if current_result.get('data') is None:
                 current_result = result_node
 
-    elif  isinstance(current_result, dict) and \
-    (request_type in api_protocol.list_requests_managers.values() or \
-      request_type in api_protocol.list_requests_stats.values() or \
-       request_type == api_protocol.list_requests_cluster['CLUSTER_CONFIG']):
+    elif isinstance(current_result, dict) and \
+    (request_type in api_protocol.list_requests_managers.keys() or \
+      request_type in api_protocol.list_requests_stats.keys() or \
+       request_type in api_protocol.list_requests_cluster.keys()):
         if current_result.get('items') is None:
             current_result['items'] = []
         if not result_node.get('data') is None:
@@ -102,7 +96,6 @@ def send_request_to_node(host, config_cluster, header, data, result_queue):
     error, response = send_request(host=host, port=config_cluster["port"], key=config_cluster['key'],
                         data=header, file=data.encode())
     if error != 0 or ((isinstance(response, dict) and response.get('error') is not None and response['error'] != 0)):
-        logging.debug(response)
         result_queue.put({'node': host, 'reason': "{0} - {1}".format(error, response), 'error': 1})
     else:
         result_queue.put(response)
@@ -151,7 +144,7 @@ def prepare_message(request_type, node_agents={}, args={}):
         - data: Body of message to be send. It's a dictinionary with NODEAGENTS, ARGS and REQUEST_TYPE.
         - nodes: List of destinatary nodes of the message.
     """
-    header = api_protocol.all_list_requests['DISTRIBUTED_REQUEST'] + " " + request_type
+    header = api_protocol.protocol_messages['DISTRIBUTED_REQUEST'] + " " + request_type
     data = {} # Data for each node
 
     # Send to all nodes
@@ -159,7 +152,7 @@ def prepare_message(request_type, node_agents={}, args={}):
         nodes = list(map(lambda x: x['url'], get_nodes()['items']))
         node_agents = {node: [] for node in nodes}
 
-    if not request_type is api_protocol.list_requests_cluster['MASTER_FORW']:
+    if not request_type is api_protocol.protocol_messages['MASTER_FORW']:
         for node in node_agents.keys():
             data[node] = {}
             data[node][api_protocol.protocol_messages['NODEAGENTS']] = node_agents[node]
@@ -217,7 +210,7 @@ def distributed_api_request(request_type, node_agents={}, args={}, from_cluster=
     '''
     if not from_cluster and get_actual_master()['name'] != config_cluster["node_name"]:
         args.append(request_type)
-        request_type = api_protocol.list_requests_cluster['MASTER_FORW']
+        request_type = api_protocol.protocol_messages['MASTER_FORW']
     '''
     header, data, nodes = prepare_message(request_type=request_type, node_agents=node_agents, args=args)
 
@@ -268,47 +261,7 @@ def get_node_agent(agent_id):
     except Exception as e:
         data = None
     return data
-
-
-def execute_request(request_type, args={}, agents={}, from_cluster=False):
-    my_wazuh = Wazuh()
-
-    functions = {
-        api_protocol.all_list_requests['MANAGERS_INFO']: my_wazuh.get_ossec_init,
-        api_protocol.all_list_requests['MANAGERS_STATUS']: manager.status,
-        api_protocol.all_list_requests['MANAGERS_OSSEC_CONF']: manager.get_ossec_conf,
-        api_protocol.all_list_requests['MANAGERS_LOGS']: manager.ossec_log,
-        api_protocol.all_list_requests['MANAGERS_LOGS_SUMMARY']: manager.ossec_log_summary,
-        api_protocol.all_list_requests['MANAGERS_STATS_TOTALS']: stats.totals,
-        api_protocol.all_list_requests['MANAGERS_STATS_HOURLY']: stats.hourly,
-        api_protocol.all_list_requests['MANAGERS_STATS_WEEKLY']: stats.weekly,
-        api_protocol.all_list_requests['MANAGERS_INFO_NODE']: my_wazuh.get_ossec_init,
-        api_protocol.all_list_requests['MANAGERS_STATUS_NODE']: manager.status,
-        api_protocol.all_list_requests['MANAGERS_OSSEC_CONF_NODE']: manager.get_ossec_conf,
-        api_protocol.all_list_requests['MANAGERS_LOGS_NODE']: manager.ossec_log,
-        api_protocol.all_list_requests['MANAGERS_LOGS_SUMMARY_NODE']: manager.ossec_log_summary,
-        api_protocol.all_list_requests['MANAGERS_STATS_TOTALS_NODE']: stats.totals,
-        api_protocol.all_list_requests['MANAGERS_STATS_HOURLY_NODE']: stats.hourly,
-        api_protocol.all_list_requests['MANAGERS_STATS_WEEKLY_NODE']: stats.weekly,
-        api_protocol.all_list_requests['GET_AGENTS']: Agent.get_agents_overview,
-        api_protocol.all_list_requests['RESTART_AGENTS_POST']: Agent.restart_agents,
-        api_protocol.all_list_requests['RESTART_AGENTS']: Agent.restart_agents,
-        api_protocol.all_list_requests['AGENTS_UPGRADE_RESULT']: Agent.get_upgrade_result,
-        api_protocol.all_list_requests['AGENTS_UPGRADE']: Agent.upgrade_agent,
-        api_protocol.all_list_requests['AGENTS_UPGRADE_CUSTOM']: Agent.upgrade_agent_custom,
-        api_protocol.all_list_requests['SYSCHECK_LAST_SCAN']: syscheck.last_scan,
-        api_protocol.all_list_requests['SYSCHECK_RUN']: syscheck.run,
-        api_protocol.all_list_requests['SYSCHECK_CLEAR']: syscheck.clear,
-        api_protocol.all_list_requests['ROOTCHECK_PCI']: rootcheck.get_pci,
-        api_protocol.all_list_requests['ROOTCHECK_CIS']: rootcheck.get_cis,
-        api_protocol.all_list_requests['ROOTCHECK_RUN']: rootcheck.run,
-        api_protocol.all_list_requests['ROOTCHECK_CLEAR']: rootcheck.clear,
-        api_protocol.all_list_requests['CLUSTER_CONFIG']: read_config
-    }
-
-    return received_request(kwargs=args, request_function=functions[request_type],
-                            request_type=request_type, from_cluster=from_cluster)
-
+    
 
 def received_request(kwargs, request_function, request_type, from_cluster=False):
     node_agents = {}
@@ -318,7 +271,7 @@ def received_request(kwargs, request_function, request_type, from_cluster=False)
         node_agents = get_dict_nodes(kwargs['node_id'])
         del kwargs['node_id']
 
-    if not request_type in api_protocol.all_list_requests.values() or \
+    if not request_type in api_protocol.all_list_requests.keys() or \
             is_a_local_request() or from_cluster:
         return request_function(**kwargs)
     else:

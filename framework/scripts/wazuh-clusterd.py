@@ -11,8 +11,9 @@ try:
     from sys import argv, exit, path
     from os.path import dirname
     from subprocess import check_call, CalledProcessError
-    from os import devnull, seteuid, setgid, getpid, kill
+    from os import devnull, seteuid, setgid, getpid, kill, remove
     from multiprocessing import Process, Manager, Value
+    from threading import Thread
     from re import search
     from time import sleep
     from pwd import getpwnam
@@ -339,6 +340,29 @@ def signal_handler(n_signal, frame):
             delete_pid("wazuh-clusterd", getpid())
     exit(1)
 
+
+def run_internal_socket():
+    try:
+        logging.info("Starting internal socket")
+        agent_socket = "{}/queue/ossec/cluster_agents".format(common.ossec_path)
+        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        try:
+            os.remove(agent_socket)
+        except OSError:
+            pass
+        sock.bind(agent_socket)
+        sock.listen(1)
+
+        while True:
+            conn, addr = sock.accept()
+            data = receive_data_from_db_socket(conn)
+            logging.info("Received in agents socket: {}".format(data))
+            conn.send("Command OK")
+
+    except Exception as e:
+        raise WazuhException(3016, str(e))
+
+
 def run_internal_daemon(debug):
     call_list = ["{0}/bin/wazuh-clusterd-internal".format(ossec_path), "-t{0}".format(cluster_config['node_type'])]
     if debug:
@@ -432,6 +456,9 @@ if __name__ == '__main__':
             p.daemon=True
         p.start()
         child_pid = p.pid
+
+    t = Thread(target=run_internal_socket)
+    t.start()
 
     server = WazuhClusterServer('' if cluster_config['bind_addr'] == '0.0.0.0' else cluster_config['bind_addr'],
                                 int(cluster_config['port']), cluster_config['key'], cluster_config['node_type'],

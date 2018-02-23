@@ -180,7 +180,7 @@ def check_cluster_cmd(cmd, node_type):
         return True
 
     # check command type
-    if not cmd[0] in ['zip', 'node'] and not cmd[0] in all_list_requests.values():
+    if not cmd[0] in ['zip', 'node', 'agentssocket'] and not cmd[0] in all_list_requests.values():
         logging.error("'{0}' it is not a valid command.".format(cmd))
         return False
 
@@ -297,14 +297,14 @@ def get_nodes(updateDBname=False):
             error_response = True
 
         if error_response:
-            data.append({'error': response, 'node':'unknown', 'status':'disconnected', 'url':url, 'localhost': False})
+            data.append({'error': response, 'node':'unknown', 'status':'disconnected', 'url':url, 'localhost': False, 'type': 'unknown'})
             error_response = False
             continue
 
         if config_cluster['node_type'] == 'master' or \
            response['type'] == 'master' or response['localhost']:
             data.append({'url':url, 'node':response['node'], 'localhost': response['localhost'],
-                         'status':'connected', 'cluster':response['cluster']})
+                         'status':'connected', 'cluster':response['cluster'], 'type': response['type']})
 
             if updateDBname:
                 query = "insertname " +response['node'] + " " + url + " " + response['type']

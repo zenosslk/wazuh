@@ -39,6 +39,7 @@
 
 #define DB_PATH DEFAULTDIR "/var/db/cluster.db"
 #define SOCKET_PATH DEFAULTDIR "/queue/ossec/cluster_db"
+#define AGENTS_SOCKET_PATH DEFAULTDIR "/queue/ossec/cluster_agents"
 #define IN_BUFFER_SIZE sizeof(struct inotify_event) + 256
 
 #define CLUSTER_JSON DEFAULTDIR "/framework/wazuh/cluster.json"
@@ -820,24 +821,28 @@ void* inotify_reader(void * args) {
                         n_files_to_watch++;
 
                     } else if (event->mask & files[j].flags) {
-                        strcpy(cmd, "update1 ");
-                        strcat(cmd, files[j].name);
-                        strcat(cmd, event->name);
+                        if (strstr(files[j].name, "/queue/agent-info") != NULL) {
+                            sprintf(cmd, "agentssocket %s", event->name);
+                        } else {
+                            strcpy(cmd, "update1 ");
+                            strcat(cmd, files[j].name);
+                            strcat(cmd, event->name);
 
-                        inotify_push_request(cmd);
-                        memset(cmd,0,sizeof(cmd));
+                            inotify_push_request(cmd);
+                            memset(cmd,0,sizeof(cmd));
 
-                        os_md5 md5_file;
-                        if (OS_MD5_File(files[j].path, md5_file, OS_BINARY) < 0) {
-                            mterror(INOTIFY_TAG, "Could not compute MD5 of file %s", files[j].path);
-                            ignore = true;
-                            continue;
-                        }
+                            os_md5 md5_file;
+                            if (OS_MD5_File(files[j].path, md5_file, OS_BINARY) < 0) {
+                                mterror(INOTIFY_TAG, "Could not compute MD5 of file %s", files[j].path);
+                                ignore = true;
+                                continue;
+                            }
 
-                        if (sprintf(cmd, "updatefile %s %ld %s", md5_file, mod_time(files[j].path), files[j].path) >= PATH_MAX + 100) {
-                            mterror(INOTIFY_TAG, "String overflow sending file updates to database in file %s", files[j].path);
-                            ignore = true;
-                            continue;
+                            if (sprintf(cmd, "updatefile %s %ld %s", md5_file, mod_time(files[j].path), files[j].path) >= PATH_MAX + 100) {
+                                mterror(INOTIFY_TAG, "String overflow sending file updates to database in file %s", files[j].path);
+                                ignore = true;
+                                continue;
+                            }
                         }
 
 
@@ -888,15 +893,19 @@ char * inotify_pop() {
     return cmd;
 }
 
+void set_address_unix_socket(struct sockaddr_un *addr, char *socket_path) {
+    memset(addr, 0, sizeof(addr));
+    addr->sun_family = AF_UNIX;
+    strncpy(addr->sun_path, socket_path, sizeof(addr->sun_path)-1);
+}
+
 void* daemon_inotify(void * args) {
     char * node_type = args;
     mtinfo(INOTIFY_TAG,"Preparing client socket");
     /* prepare socket to send data to cluster database */
-    struct sockaddr_un addr;
-
-    memset(&addr, 0, sizeof(addr));
-    addr.sun_family = AF_UNIX;
-    strncpy(addr.sun_path, SOCKET_PATH, sizeof(addr.sun_path)-1);
+    struct sockaddr_un addr_db, addr_agents;
+    set_address_unix_socket(&addr_db, SOCKET_PATH);
+    set_address_unix_socket(&addr_agents, AGENTS_SOCKET_PATH);
 
     // Create hash table
     if (ptable = OSHash_Create(), !ptable)
@@ -936,6 +945,7 @@ void* daemon_inotify(void * args) {
     int db_socket, rc;
     while(1) {
         char * cmd = inotify_pop();
+        struct sockaddr_un addr = (strstr(cmd, "agentssocket") != NULL) ? addr_agents : addr_db;
 
         if ((db_socket = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
             mterror_exit(INOTIFY_TAG, "Error initializing client socket: %s", strerror(errno));

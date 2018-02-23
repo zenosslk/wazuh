@@ -39,6 +39,20 @@ except:
     compression = zipfile.ZIP_STORED
 
 
+def update_agent_database(agent_info_name, node_id):
+    regex = re.compile(r"(\w+)-(any|\d+.\d+.\d+.\d+|\d+.\d+.\d+.\d+\/\d+)")
+    try:
+        name = regex.match(agent_info_name).group(1)
+    except AttributeError as e:
+        raise WazuhException(3017, agent_info_name)
+    agent_id = Agent.get_agent_by_name(name)['id']
+    cluster_socket = connect_to_db_socket()
+    send_to_socket(cluster_socket, "delagentnode {}".format(agent_id))
+    received = receive_data_from_db_socket(cluster_socket)
+    send_to_socket(cluster_socket, "insnodeagent {} {}".format(agent_id, node_id))
+    received = receive_data_from_db_socket(cluster_socket)
+
+
 def get_file_info(filename, cluster_items, node_type):
     def is_synced_file(mtime, node_type):
         if node_type == 'master':

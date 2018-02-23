@@ -13,7 +13,7 @@ try:
     from subprocess import check_call, CalledProcessError
     from os import devnull, seteuid, setgid, getpid, kill, remove
     from multiprocessing import Process, Manager, Value
-    from threading import Thread
+    import threading
     from re import search
     from time import sleep
     from pwd import getpwnam
@@ -132,6 +132,10 @@ class WazuhClusterHandler(asynchat.async_chat):
                     self.finished_clients.value = 0
                     self.connected_clients.value = 0
                     kill(child_pid, SIGUSR1)
+
+            elif message == 'agentssocket':
+                res = "Command OK"
+                update_agent_database(self.command[1], self.addr)
 
             elif message == api_protocol.all_list_requests['DISTRIBUTED_REQUEST']:
                 api_request_type = self.command[1]
@@ -344,16 +348,17 @@ def signal_handler(n_signal, frame):
             kill(child_pid, SIGTERM)
             # remove pid files
             delete_pid("wazuh-clusterd", getpid())
+
     exit(1)
 
 
-def run_internal_socket():
+def run_internal_socket(cluster_config):
     try:
         logging.info("Starting internal socket")
         agent_socket = "{}/queue/ossec/cluster_agents".format(common.ossec_path)
         sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         try:
-            os.remove(agent_socket)
+            remove(agent_socket)
         except OSError:
             pass
         sock.bind(agent_socket)
@@ -362,10 +367,29 @@ def run_internal_socket():
         while True:
             conn, addr = sock.accept()
             data = receive_data_from_db_socket(conn)
-            logging.info("Received in agents socket: {}".format(data))
             conn.send("Command OK")
+            logging.info("Received in agents socket: {}".format(data))
+            
+            try:
+                node_info = next (x for x in get_nodes()['items'] if x['type'] == 'master')
+            except StopIteration as e:
+                raise WazuhException(3018)
+
+            logging.debug("Master node is: {}".format(node_info))
+            if node_info['localhost']:
+                update_agent_database(data.split(' ')[1], node_info['url'])
+            else:
+                error, res = send_request(host=node_info['url'], port=cluster_config['port'], key=cluster_config['key'], 
+                                          data="{} {}".format(data, '-'*(common.cluster_protocol_plain_size - len(data) - 1)))
+                logging.debug("Response from master node: {} - {}".format(error, res))
+                if error:
+                    logging.error("Error sending agent update to the master: {}".format(res))
+                elif res['error']:
+                    logging.error("Error in sent agent update: {}".format(res['data']))
+
 
     except Exception as e:
+        logging.error("Error in internal cluster socket: {}".format(str(e)))
         raise WazuhException(3016, str(e))
 
 
@@ -463,7 +487,8 @@ if __name__ == '__main__':
         p.start()
         child_pid = p.pid
 
-    t = Thread(target=run_internal_socket)
+    t = threading.Thread(target=run_internal_socket, args=(cluster_config,))
+    t.daemon=True
     t.start()
 
     server = WazuhClusterServer('' if cluster_config['bind_addr'] == '0.0.0.0' else cluster_config['bind_addr'],

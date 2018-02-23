@@ -101,9 +101,11 @@ class WazuhClusterHandler(asynchat.async_chat):
             message = self.command[0]
         logging.debug("Message received: {0}".format(message))
 
-        if not check_cluster_cmd(self.command, self.node_type):
-            logging.error("Received invalid cluster command {0} from {1}".format(
-                            self.command[0], self.addr))
+        valid_command, msg = check_cluster_cmd(self.command, self.node_type)
+
+        if not valid_command:
+            logging.error("Received invalid cluster command {0} from {1}: {2}".format(
+                            self.command[0], self.addr, msg))
             error = 1
             res = "Received invalid cluster command {0}".format(self.command[0])
 
@@ -132,22 +134,24 @@ class WazuhClusterHandler(asynchat.async_chat):
                     self.connected_clients.value = 0
                     kill(child_pid, SIGUSR1)
 
-            elif message == api_protocol.all_list_requests['DISTRIBUTED_REQUEST']:
+            elif message == protocol_messages['DISTRIBUTED_REQUEST']:
                 api_request_type = self.command[1]
                 data = json.loads(self.f.decrypt(response[common.cluster_sync_msg_size:]))
                 from_cluster = True
-                agents = {}
+                agents = []
                 args = {}
 
-                if data.get(api_protocol.protocol_messages['REQUEST_TYPE']):
-                    api_request_type = data[api_protocol.protocol_messages['REQUEST_TYPE']]
-                if data.get(api_protocol.protocol_messages['NODEAGENTS']):
-                    agents = data[api_protocol.protocol_messages['NODEAGENTS']]
-                if data.get(api_protocol.protocol_messages['ARGS']):
-                    args = data[api_protocol.protocol_messages['ARGS']]
+                if data.get(protocol_messages['REQUEST_TYPE']):
+                    api_request_type = data[protocol_messages['REQUEST_TYPE']]
+                if data.get(protocol_messages['ARGS']):
+                    args = data[protocol_messages['ARGS']]
+                if data.get(protocol_messages['NODEAGENTS']):
+                    agents = data[protocol_messages['NODEAGENTS']]
+                    args['agent_id'] = agents
 
                 try:
-                    res = execute_request(request_type=api_request_type, args=args, agents=agents, from_cluster=True)
+                    res = received_request(kwargs=args, request_function=all_list_requests[api_request_type],
+                                                request_type=api_request_type, from_cluster=from_cluster)
                 except Exception as e:
                     res = e
 

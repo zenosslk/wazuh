@@ -135,6 +135,7 @@ class WazuhClusterHandler(asynchat.async_chat):
             elif message == api_protocol.all_list_requests['DISTRIBUTED_REQUEST']:
                 api_request_type = self.command[1]
                 data = json.loads(self.f.decrypt(response[common.cluster_sync_msg_size:]))
+                from_cluster = True
                 agents = {}
                 args = {}
 
@@ -146,7 +147,7 @@ class WazuhClusterHandler(asynchat.async_chat):
                     args = data[api_protocol.protocol_messages['ARGS']]
 
                 try:
-                    res = execute_request(request_type=api_request_type, args=args, agents=agents)
+                    res = execute_request(request_type=api_request_type, args=args, agents=agents, from_cluster=True)
                 except Exception as e:
                     res = e
 

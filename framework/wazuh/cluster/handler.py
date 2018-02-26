@@ -54,7 +54,9 @@ def update_agent_database(agent_info_name, node_id):
 
 
 def get_file_info(filename, cluster_items, node_type):
-    def is_synced_file(mtime, node_type):
+    def is_synced_file(mtime, node_type, send):
+        if not send:
+            return True
         if node_type == 'master':
             return False
         else:
@@ -80,7 +82,7 @@ def get_file_info(filename, cluster_items, node_type):
         "modification_time" : str(datetime.utcfromtimestamp(st_mtime)),
         'timestamp': st_mtime,
         "size" : st_size,
-        'is_synced': is_synced_file(st_mtime, node_type)
+        'is_synced': is_synced_file(st_mtime, node_type, new_item['send'])
     }
 
     return file_item

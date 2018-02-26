@@ -8,6 +8,7 @@
         "files": ["client.keys"],
         "recursive": false,
         "restart": false,
+        "send": true,
         "description": "client keys file database"
     },
 
@@ -20,18 +21,20 @@
         "files": ["all"],
         "recursive": true,
         "restart": false,
+        "send": true,
         "description": "shared configuration files"
     },
 
     "/queue/agent-info/": {
         "umask": "0o117",
         "format":"plain",
-        "source": "client",
+        "source": "all",
         "write_mode": "atomic",
         "flags": ["IN_CLOSE_WRITE", "IN_ATTRIB", "IN_MOVED_TO", "IN_DELETE"],
         "files": ["all"],
         "recursive": false,
         "restart": false,
+        "send": false,
         "description": "agent status"
     },
 
@@ -44,6 +47,7 @@
         "files": ["all"],
         "recursive": false,
         "restart": false,
+        "send": true,
         "description": "agents group configuration"
     },
 
@@ -56,6 +60,7 @@
         "files": ["all"],
         "recursive": false,
         "restart": true,
+        "send": true,
         "description": "user rules"
     },
 
@@ -68,6 +73,7 @@
         "files": ["all"],
         "recursive": false,
         "restart": true,
+        "send": true,
         "description": "user decoders"
     },
 
@@ -80,6 +86,7 @@
         "files": ["all"],
         "recursive": true,
         "restart": true,
+        "send": true,
         "description": "user CDB lists"
     },
 

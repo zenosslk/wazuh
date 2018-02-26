@@ -12,6 +12,7 @@ from sys import version
 import re
 import ast
 import json
+from datetime import datetime
 import logging
 
 is_py2 = version[0] == '2'
@@ -27,66 +28,59 @@ def append_node_result_by_type(node, result_node, request_type, current_result=N
         request_type = request_type[1]
     if current_result is None:
         current_result = {}
+    if current_result.get("data") is None:
+        current_result["data"] = {}
+    if current_result["data"].get("items") is None:
+        current_result["data"]["items"] = {}
+    if current_result["data"].get("totalItems") is None:
+        current_result["data"]["totalItems"] = 0
 
-    '''
-    if 'restart' in request_type:
-        if isinstance(result_node.get('data'), dict):
-            if result_node.get('data').get('affected_agents') != None:
-                if current_result.get('affected_agents') is None:
-                    current_result['affected_agents'] = []
-                current_result['affected_agents'].extend(result_node['data']['affected_agents'])
+    #current_result[node] = result_node
 
-            if result_node.get('data').get('failed_ids'):
-                if current_result.get('failed_ids') is None:
-                    current_result['failed_ids'] = []
-                current_result['failed_ids'].extend(result_node['data']['failed_ids'])
+    if result_node.get("data") is None:
+        return current_result
+    if result_node["data"].get("items") is None:
+        return current_result
 
-            if not result_node.get('data').get('failed_ids') is None and not result_node.get('data').get('msg') is None:
-                current_result['msg'] = result_node['data']['msg']
-            if current_result.get('failed_ids') is None and not result_node.get('data').get('msg') is None:
-                current_result['msg'] = result_node['data']['msg']
-            if not current_result.get('failed_ids') is None and not current_result.get('affected_agents') is None:
-                current_result['msg'] = "Some agents were not restarted"
+    current_result_items = list(current_result["data"]["items"])
+    total_items  = current_result["data"]["totalItems"]
+
+    # Se recorre el resultado del nodo
+    for agent in result_node["data"]["items"]:
+        id = agent.get("id")
+        last_keep_alive = agent.get("lastKeepAlive")
+        logging.warning("result_node Agente: {} ({})".format( id, last_keep_alive))
+
+        # Comparando con el resultado que ya tenemos
+        for i, agent_result in enumerate(current_result["data"]["items"]):
+
+            # El agente existe en el resultado que ya teniamos
+            if agent_result.get("id") == id:
+                id_result = agent_result["id"]
+                last_keep_alive_result = agent_result.get("lastKeepAlive")
+
+                # El agente del resultado no es never connected (tiene last keep alive)
+                if last_keep_alive_result is not None:
+
+                    # Si el que teniamos no tiene last keep alive --> Nos quedamos con el del resultado
+                    if last_keep_alive is None:
+                        current_result_items[i] = agent_result
+                    else:
+                        # Comparamos el lastkeepalive de ambos agentes
+                        last_keep_alive_time = datetime.strptime(last_keep_alive, '%Y-%m-%d %H:%M:%S')
+                        last_keep_alive_time_result = datetime.strptime(last_keep_alive_result, '%Y-%m-%d %H:%M:%S')
+                        if last_keep_alive_time > last_keep_alive_time_result:
+                            current_result_items[i] = agent_result
+                break
         else:
-            if current_result.get('data') is None:
-                current_result = result_node
+            # No existe el ID en el resultado final -> Se anade al final
+            current_result_items.append(agent)
+            total_items = total_items+1
 
-    elif isinstance(current_result, dict) and \
-    (request_type in api_protocol.list_requests_managers.keys() or \
-      request_type in api_protocol.list_requests_stats.keys() or \
-       request_type in api_protocol.list_requests_cluster.keys()):
-        if current_result.get('items') is None:
-            current_result['items'] = []
-        if not result_node.get('data') is None:
-            current_result['items'].append(result_node['data'])
-        else:
-            current_result['items'].append(result_node)
-        index = 0
-        if (len(current_result['items']) > 0):
-            index = len(current_result['items']) -1
+        current_result["data"]["items"] = current_result_items
+        current_result["data"]["totalItems"] = total_items
 
-        if (isinstance(current_result['items'][len(current_result['items'])-1], dict)):
-            current_result['items'][index]['node_id'] = get_name_from_ip(node)
-            current_result['items'][index]['url'] = node
-        elif (isinstance(current_result['items'][len(current_result['items'])-1], list)):
-            current_result['items'][index].append({
-                'node_id':get_name_from_ip(node),
-                'url':node})
-        if current_result.get('totalItems') is None:
-            current_result['totalItems'] = 0
-        current_result['totalItems'] += 1
-    else:
 
-        if isinstance(result_node, dict):
-            if not result_node.get('data') is None:
-                current_result = result_node['data']
-            elif not result_node.get('message') is None:
-                current_result['message'] = result_node['message']
-                current_result['error'] = result_node['error']
-        else:
-            current_result = result_node
-    '''
-    current_result[node] = result_node
 
     return current_result
 
@@ -261,7 +255,7 @@ def get_node_agent(agent_id):
     except Exception as e:
         data = None
     return data
-    
+
 
 def received_request(kwargs, request_function, request_type, from_cluster=False):
     node_agents = {}

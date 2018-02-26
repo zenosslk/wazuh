@@ -30,6 +30,7 @@ protocol_messages = {
 # API Messages
 list_requests_agents = {
     'PUT/agents/restart'                   : Agent.restart_agents,
+    '/agents'                             : Agent.get_agents_overview,
     'PUT/agents/:agent_id/restart'         : Agent.restart_agents,
     '/agents/:agent_id/upgrade_result'     : Agent.get_upgrade_result,
     'PUT/agents/:agent_id/upgrade'         : Agent.upgrade_agent,

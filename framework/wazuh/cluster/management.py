@@ -5,7 +5,7 @@
 from wazuh.exception import WazuhException
 from wazuh.configuration import get_ossec_conf
 from wazuh.InputValidator import InputValidator
-from wazuh.cluster.api_protocol_messages import all_list_requests
+from wazuh.cluster.api_protocol_messages import all_list_requests, protocol_messages
 from wazuh.configuration import get_ossec_conf
 from wazuh import common
 from subprocess import check_output
@@ -158,37 +158,38 @@ def get_status_json():
 
 def check_cluster_cmd(cmd, node_type):
     # cmd must be a list
+    msg = ""
     if not isinstance(cmd, list):
-        logging.error("'{0}' is not istance of list".format(cmd))
-        return False
+        msg = "'{0}' is not istance of list".format(cmd)
+        return False, msg
 
     # check cmd len list
     if len(cmd) != 2 and len(cmd) != 3:
-        logging.error("'{0}' too many commands received.".format(cmd))
-        return False
+        msg = "'{0}' too many commands received.".format(cmd)
+        return False, msg
 
     # check cmd len
     if len(' '.join(cmd)) != common.cluster_protocol_plain_size:
-        logging.error("'{0}' it's too big. Max length allowed for commands: {1}".format(cmd, common.cluster_protocol_plain_size))
-        return False
+        msg = "'{0}' it's too big. Max length allowed for commands: {1}".format(cmd, common.cluster_protocol_plain_size)
+        return False, msg
 
     # 'ready' cmd can only be sent by a master node to a client node
     if cmd[0] == 'ready' and node_type == 'client':
-        return True
+        return True, msg
 
     if cmd[0] == 'finished' and node_type == 'master':
-        return True
+        return True, msg
 
     # check command type
     if not cmd[0] in ['zip', 'node', 'agentssocket'] and not cmd[0] in all_list_requests.values():
-        logging.error("'{0}' it is not a valid command.".format(cmd))
-        return False
+        msg = "'{0}' it is not a valid command.".format(cmd)
+        return False, msg
 
     # second argument of zip is a number
     if cmd[0] == 'zip' and not re.compile('\d+').match(cmd[1]):
-        return False
+        return False, msg
 
-    return True
+    return True, msg
 
 
 def check_cluster_config(config):

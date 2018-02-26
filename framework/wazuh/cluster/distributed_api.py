@@ -268,11 +268,12 @@ def get_config_distributed(node_id=None, from_cluster=False):
 def get_node_agent(agent_id):
     data = None
     try:
-        node_name = Agent(agent_id).get_basic_information()['node_name']
-        data = get_ip_from_name(node_name)
+        cluster_socket = connect_to_db_socket()
+        send_to_socket(cluster_socket, "selagentnode {}".format(agent_id))
+        node_id = receive_data_from_db_socket(cluster_socket)
+        return node_id
     except Exception as e:
-        data = None
-    return data
+        logging.error("Error getting agent {}'s' node: {}".format(agent_id, str(e)))
 
 
 def get_agents_by_node(agent_id):

@@ -49,7 +49,6 @@ def append_node_result_by_type(node, result_node, request_type, current_result=N
     for agent in result_node["data"]["items"]:
         id = agent.get("id")
         last_keep_alive = agent.get("lastKeepAlive")
-        logging.warning("result_node Agente: {} ({})".format( id, last_keep_alive))
 
         # Comparando con el resultado que ya tenemos
         for i, agent_result in enumerate(current_result["data"]["items"]):
@@ -95,7 +94,7 @@ def send_request_to_node(host, config_cluster, header, data, result_queue):
         result_queue.put(response)
 
 
-def send_request_to_nodes(config_cluster, header, data, nodes, args):
+def send_request_to_nodes(config_cluster, header, data, nodes):
     threads = []
     result = {}
     result_node = {}
@@ -185,6 +184,21 @@ def get_dict_nodes(nodes):
     return node_agents
 
 
+def apply_pagination_and_sort(result, offset=0, limit=common.database_limit, sort=None):
+    logging.warning("ok1")
+    if result.get("data") and result["data"].get("items") and isinstance(result["data"]["items"], list):
+        logging.warning("ok2")
+        if limit is not None and offset is not None:
+            logging.warning("offset {0} / limit {1} / len{2}".format(offset, limit, len(result["data"]["items"])))
+            result["data"]["items"] = list(result["data"]["items"][offset:limit])
+            logging.warning("offset {0} / limit {1} / len{2}".format(offset, limit, len(result["data"]["items"])))
+
+        if sort and sort['fields']:
+            result["data"]["items"] = sorted(result["data"]["items"], key=itemgetter(sort['fields'][0]), reverse=True if sort['order'] == "desc" else False)
+
+    return result
+
+
 def distributed_api_request(request_type, node_agents={}, args={}, from_cluster=False):
     """
     Send distributed request using the cluster.
@@ -206,6 +220,20 @@ def distributed_api_request(request_type, node_agents={}, args={}, from_cluster=
         args.append(request_type)
         request_type = api_protocol.protocol_messages['MASTER_FORW']
     '''
+
+    limit = common.database_limit
+    offset = 0
+    sort = None
+    if args.get('limit'):
+        limit = int(args['limit'])
+        del args['limit']
+    if args.get('offset'):
+        offset = int(args['offset'])
+        del args['offset']
+    if args.get('sort'):
+        sort = args['sort']
+        del args['sort']
+
     header, data, nodes = prepare_message(request_type=request_type, node_agents=node_agents, args=args)
 
     # Elected master resolves his own request in local
@@ -225,7 +253,11 @@ def distributed_api_request(request_type, node_agents={}, args={}, from_cluster=
     '''
 
     if len(data) > 0:
-        result = send_request_to_nodes(config_cluster=config_cluster, header=header, data=data, nodes=nodes, args=args)
+        result = apply_pagination_and_sort(
+            send_request_to_nodes(config_cluster=config_cluster, header=header, data=data, nodes=nodes),
+            limit=limit, offset=offset, sort=sort);
+
+
 
     # Merge local and distributed results
     '''

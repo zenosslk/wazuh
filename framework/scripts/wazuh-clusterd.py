@@ -147,7 +147,7 @@ class WazuhClusterHandler(asynchat.async_chat):
                 args = {}
                 from_cluster=True
 
-                if api_request_type == api_protocol.all_list_requests['MASTER_FORW']:
+                if api_request_type == api_protocol.protocol_messages['MASTER_FORW']:
                     from_cluster=False
 
                 if data.get(protocol_messages['REQUEST_TYPE']):
@@ -200,7 +200,7 @@ class WazuhClusterHandler(asynchat.async_chat):
 
 class WazuhClusterServer(asyncore.dispatcher):
 
-    def __init__(self, bind_addr, port, key, node_type, requests_queue, finished_clients, restart_after_sync, connected_clients):
+    def __init__(self, bind_addr, port, key, node_type, requests_queue, finished_clients, restart_after_sync, connected_clients, config_cluster):
         asyncore.dispatcher.__init__(self)
         self.create_socket(socket.AF_INET, socket.SOCK_STREAM)
         self.socket.settimeout(common.cluster_timeout)
@@ -218,11 +218,10 @@ class WazuhClusterServer(asyncore.dispatcher):
             raise e
         self.listen(50)
 
-        cluster_info = read_config()
-        logging.info("Starting cluster {0}".format(cluster_info['name']))
+        logging.info("Starting cluster {0}".format(config_cluster['name']))
         logging.info("Listening on port {0}.".format(port))
-        logging.info("{0} nodes found in configuration".format(len(cluster_info['nodes'])))
-        logging.info("Synchronization interval: {0}".format(cluster_info['interval']))
+        logging.info("{0} nodes found in configuration".format(len(config_cluster['nodes'])))
+        logging.info("Synchronization interval: {0}".format(config_cluster['interval']))
 
 
     def handle_accept(self):
@@ -498,5 +497,5 @@ if __name__ == '__main__':
 
     server = WazuhClusterServer('' if cluster_config['bind_addr'] == '0.0.0.0' else cluster_config['bind_addr'],
                                 int(cluster_config['port']), cluster_config['key'], cluster_config['node_type'],
-                                requests_queue, finished_clients, restart_after_sync, connected_clients)
+                                requests_queue, finished_clients, restart_after_sync, connected_clients, cluster_config)
     asyncore.loop()

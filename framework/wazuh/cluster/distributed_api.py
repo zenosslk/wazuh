@@ -3,9 +3,10 @@
 # Created by Wazuh, Inc. <info@wazuh.com>.
 # This program is a free software; you can redistribute it and/or modify it under the terms of GPLv2
 
-from wazuh.cluster.management import send_request, read_config, check_cluster_status, get_node, get_nodes, get_status_json, get_name_from_ip, get_ip_from_name
+from wazuh.cluster.management import send_request, read_config, check_cluster_status, get_node, get_nodes, get_status_json, get_name_from_ip, get_ip_from_name, connect_to_db_socket, receive_data_from_db_socket, send_to_socket
 from wazuh.cluster import api_protocol_messages as api_protocol
 from wazuh.exception import WazuhException
+from wazuh.agent import Agent
 from wazuh import common
 import threading
 from sys import version
@@ -13,6 +14,8 @@ import re
 import ast
 import json
 import logging
+from operator import itemgetter
+from itertools import chain
 
 is_py2 = version[0] == '2'
 if is_py2:
@@ -50,30 +53,32 @@ def append_node_result_by_type(node, result_node, request_type, current_result=N
             if current_result.get('data') is None:
                 current_result = result_node
 
-    elif isinstance(current_result, dict) and \
-    (request_type in api_protocol.list_requests_managers.keys() or \
-      request_type in api_protocol.list_requests_stats.keys() or \
-       request_type in api_protocol.list_requests_cluster.keys()):
+    elif isinstance(current_result, dict) and request_type in api_protocol.all_list_requests.keys():
+        if result_node.get('data'):
+            result_node = result_node['data']
         if current_result.get('items') is None:
-            current_result['items'] = []
-        if not result_node.get('data') is None:
-            current_result['items'].append(result_node['data'])
+            current_result['items'] = result_node['items']
         else:
-            current_result['items'].append(result_node)
-        index = 0
-        if (len(current_result['items']) > 0):
-            index = len(current_result['items']) -1
+            current_result['items'].extend(result_node['items'])
 
-        if (isinstance(current_result['items'][len(current_result['items'])-1], dict)):
-            current_result['items'][index]['node_id'] = get_name_from_ip(node)
-            current_result['items'][index]['url'] = node
-        elif (isinstance(current_result['items'][len(current_result['items'])-1], list)):
-            current_result['items'][index].append({
-                'node_id':get_name_from_ip(node),
-                'url':node})
-        if current_result.get('totalItems') is None:
-            current_result['totalItems'] = 0
-        current_result['totalItems'] += 1
+        if not current_result.get('totalItems'):
+            current_result['totalItems'] = result_node['totalItems']
+        else:
+            current_result['totalItems'] += result_node['totalItems']
+        # index = 0
+        # if (len(current_result['items']) > 0):
+        #     index = len(current_result['items']) -1
+
+        # if (isinstance(current_result['items'][len(current_result['items'])-1], dict)):
+        #     current_result['items'][index]['node_id'] = get_name_from_ip(node)
+        #     current_result['items'][index]['url'] = node
+        # elif (isinstance(current_result['items'][len(current_result['items'])-1], list)):
+        #     current_result['items'][index].append({
+        #         'node_id':get_name_from_ip(node),
+        #         'url':node})
+        # if current_result.get('totalItems') is None:
+        #     current_result['totalItems'] = 0
+        # current_result['totalItems'] += 1
     else:
         if isinstance(result_node, dict):
             if not result_node.get('data') is None:
@@ -83,11 +88,12 @@ def append_node_result_by_type(node, result_node, request_type, current_result=N
                 current_result['error'] = result_node['error']
         else:
             current_result = result_node
+
     return current_result
 
 
 def send_request_to_node(host, config_cluster, header, data, result_queue):
-    header = "{0} {1}".format(header, 'a'*(common.cluster_protocol_plain_size - len(header + " ")))
+    header = "{0} {1}".format(header, '-'*(common.cluster_protocol_plain_size - len(header + " ")))
     error, response = send_request(host=host, port=config_cluster["port"], key=config_cluster['key'],
                         data=header, file=data.encode())
     if error != 0 or ((isinstance(response, dict) and response.get('error') is not None and response['error'] != 0)):
@@ -96,7 +102,7 @@ def send_request_to_node(host, config_cluster, header, data, result_queue):
         result_queue.put(response)
 
 
-def send_request_to_nodes(config_cluster, header, data, nodes, args):
+def send_request_to_nodes(config_cluster, header, data, nodes):
     threads = []
     result = {}
     result_node = {}
@@ -121,8 +127,9 @@ def send_request_to_nodes(config_cluster, header, data, nodes, args):
         result_nodes[node] = result_node
     for t in threads:
         t.join()
-    for node, result_node in result_nodes.iteritems():
+    for node, result_node in result_nodes.items():
         result = append_node_result_by_type(node=node, result_node=result_node, request_type=header, current_result=result)
+
     return result
 
 
@@ -156,7 +163,7 @@ def prepare_message(request_type, node_agents={}, args={}):
         nodes = list(map(lambda x: x['url'], get_nodes()['items']))
         node_agents = {node: [] for node in nodes}
 
-    if not request_type is api_protocol.protocol_messages['MASTER_FORW']:
+    if not request_type == api_protocol.protocol_messages['MASTER_FORW']:
         for node in node_agents.keys():
             data[node] = {}
             data[node][api_protocol.protocol_messages['NODEAGENTS']] = node_agents[node]
@@ -195,7 +202,7 @@ def get_dict_nodes(nodes):
     return node_agents
 
 
-def distributed_api_request(request_type, node_agents={}, args={}, from_cluster=False):
+def distributed_api_request(request_type, node_agents={}, args={}, from_cluster=False, offset=0, limit=common.database_limit):
     """
     Send distributed request using the cluster.
     :param request_type: Type of request. It have to be one of 'api_protocol_messages.all_list_requests'.
@@ -207,6 +214,14 @@ def distributed_api_request(request_type, node_agents={}, args={}, from_cluster=
     :param from_cluster: Request comes from the cluster. If request is from cluster, it not be redirected.
     :return: Output of API distributed call in JSON.
     """
+    def apply_pagination_sort(result, sort=None, limit=common.database_limit, offset=0):
+        if result.get("items") and isinstance(result["items"], list):
+            result["items"] = result["items"][offset:limit]
+
+            if sort and sort['fields']:
+                result["items"] = sorted(result["items"], key=itemgetter(sort['fields'][0]), reverse=True if sort['order'] == "desc" else False)
+        return result
+
     config_cluster = read_config()
     result, result_local = None, None
 
@@ -236,7 +251,8 @@ def distributed_api_request(request_type, node_agents={}, args={}, from_cluster=
     '''
 
     if len(data) > 0:
-        result = send_request_to_nodes(config_cluster=config_cluster, header=header, data=data, nodes=nodes, args=args)
+        result = apply_pagination_sort(result=send_request_to_nodes(config_cluster=config_cluster, header=header, data=data, nodes=nodes),
+                                        limit=limit, offset=offset, sort=args['sort'] if 'sort' in args.keys() else {})
 
     # Merge local and distributed results
     '''
@@ -259,11 +275,11 @@ def get_config_distributed(node_id=None, from_cluster=False):
 
 
 def get_node_agent(agent_id):
-    data = None
     try:
         cluster_socket = connect_to_db_socket()
         send_to_socket(cluster_socket, "selagentnode {}".format(agent_id))
         node_id = receive_data_from_db_socket(cluster_socket)
+        cluster_socket.close()
         return node_id
     except Exception as e:
         logging.error("Error getting agent {}'s' node: {}".format(agent_id, str(e)))
@@ -286,18 +302,55 @@ def get_agents_by_node(agent_id):
                 node_agents[addr] = []
             node_agents[addr].append(str(id).zfill(3))
     else:
-        if agent_id is not None:
-            node_agents[get_node_agent(agent_id)] = [str(agent_id).zfill(3)]
+        if agent_id == "all":
+            node_list = get_nodes()['items']
+            all_ids = set(map(itemgetter('id'), Agent.get_agents_overview(select={'fields':['id']})['items'])) - {'000'}
+            cluster_socket = connect_to_db_socket()
+            
+            for node in node_list:
+                send_to_socket(cluster_socket, "selnodeagents {}".format(node['url']))
+                agent_id = receive_data_from_db_socket(cluster_socket).split(' ')[:-1]
+
+                if len(agent_id) > 0:
+                    node_agents[node['url']] = agent_id
+
+                if node['localhost']:
+                    master_url = node['url']
+
+            cluster_socket.close()
+            never_connected_ids = list(all_ids - set(chain.from_iterable(node_agents.values())))
+            try:
+                if len(never_connected_ids) > 0:
+                    node_agents[master_url].extend(never_connected_ids)
+            except KeyError:
+                node_agents[master_url] = never_connected_ids
+        else:
+            addr = get_node_agent(agent_id).strip()
+            node_agents[addr] = [agent_id]
     return node_agents
 
 
 def received_request(kwargs, request_function, request_type, from_cluster=False):
     node_agents = {}
+
+    if kwargs.get('offset'):
+        offset = int(kwargs['offset'])
+        kwargs['offset'] = 0
+    else:
+        offset = 0
+
+    if kwargs.get('limit'):
+        limit = int(kwargs['limit'])
+        kwargs['limit'] = 0
+    else:
+        limit = common.database_limit
+
     if kwargs.get('agent_id'):
         node_agents = get_agents_by_node(kwargs['agent_id'])
     elif kwargs.get('node_id'):
         node_agents = get_dict_nodes(kwargs['node_id'])
         del kwargs['node_id']
+
 
     if not request_type in api_protocol.all_list_requests.keys() or \
             is_a_local_request() or from_cluster:
@@ -306,4 +359,4 @@ def received_request(kwargs, request_function, request_type, from_cluster=False)
         if not is_cluster_running():
             raise WazuhException(3015)
 
-        return distributed_api_request(request_type=request_type, node_agents=node_agents, args=kwargs)
+        return distributed_api_request(request_type=request_type, node_agents=node_agents, args=kwargs, limit=limit, offset=0)

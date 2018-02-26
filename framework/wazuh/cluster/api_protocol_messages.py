@@ -24,7 +24,8 @@ protocol_messages = {
     'zip'                   : 'zip',
     'node'                  : 'node',
     'ready'                 : 'ready',
-    'data'                  : 'data'
+    'data'                  : 'data',
+    'agentssocket'          : 'agentssocket'
 }
 
 # API Messages
@@ -33,7 +34,8 @@ list_requests_agents = {
     'PUT/agents/:agent_id/restart'         : Agent.restart_agents,
     '/agents/:agent_id/upgrade_result'     : Agent.get_upgrade_result,
     'PUT/agents/:agent_id/upgrade'         : Agent.upgrade_agent,
-    'PUT/agents/:agent_id/upgrade_custom'  : Agent.upgrade_agent_custom
+    'PUT/agents/:agent_id/upgrade_custom'  : Agent.upgrade_agent_custom,
+    '/agents'                              : Agent.get_agents_overview
 }
 
 list_requests_syscheck = {

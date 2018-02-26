@@ -181,7 +181,7 @@ def check_cluster_cmd(cmd, node_type):
         return True, msg
 
     # check command type
-    if not cmd[0] in ['zip', 'node', 'agentssocket'] and not cmd[0] in all_list_requests.values():
+    if not cmd[0] in protocol_messages.values():
         msg = "'{0}' it is not a valid command.".format(cmd)
         return False, msg
 

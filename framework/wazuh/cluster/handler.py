@@ -40,7 +40,7 @@ except:
 
 
 def update_agent_database(agent_info_name, node_id):
-    regex = re.compile(r"(\w+)-(any|\d+.\d+.\d+.\d+|\d+.\d+.\d+.\d+\/\d+)")
+    regex = re.compile(r"(\S+)-(any|\d+.\d+.\d+.\d+|\d+.\d+.\d+.\d+\/\d+)")
     try:
         name = regex.match(agent_info_name).group(1)
     except AttributeError as e:

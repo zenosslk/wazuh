@@ -13,6 +13,7 @@ import re
 import ast
 import json
 from datetime import datetime
+from operator import itemgetter
 import logging
 
 is_py2 = version[0] == '2'
@@ -185,13 +186,9 @@ def get_dict_nodes(nodes):
 
 
 def apply_pagination_and_sort(result, offset=0, limit=common.database_limit, sort=None):
-    logging.warning("ok1")
     if result.get("data") and result["data"].get("items") and isinstance(result["data"]["items"], list):
-        logging.warning("ok2")
         if limit is not None and offset is not None:
-            logging.warning("offset {0} / limit {1} / len{2}".format(offset, limit, len(result["data"]["items"])))
             result["data"]["items"] = list(result["data"]["items"][offset:limit])
-            logging.warning("offset {0} / limit {1} / len{2}".format(offset, limit, len(result["data"]["items"])))
 
         if sort and sort['fields']:
             result["data"]["items"] = sorted(result["data"]["items"], key=itemgetter(sort['fields'][0]), reverse=True if sort['order'] == "desc" else False)

@@ -304,12 +304,17 @@ def get_agents_by_node(agent_id):
     else:
         if agent_id == "all":
             node_list = get_nodes()['items']
-            all_ids = set(map(itemgetter('id'), Agent.get_agents_overview(select={'fields':['id']})['items'])) - {'000'}
+            all_ids = set(map(itemgetter('id'), Agent.get_agents_overview(select={'fields':['id']}, limit=None)['items'])) - {'000'}
             cluster_socket = connect_to_db_socket()
             
             for node in node_list:
-                send_to_socket(cluster_socket, "selnodeagents {}".format(node['url']))
-                agent_id = receive_data_from_db_socket(cluster_socket).split(' ')[:-1]
+                send_to_socket(cluster_socket, "countagentnode {}".format(node['url']))
+                total_agents = int(receive_data_from_db_socket(cluster_socket))
+                agent_id = []
+                limit = 1000
+                for offset in range(0, total_agents, limit):
+                    send_to_socket(cluster_socket, "selnodeagents {} {} {}".format(node['url'], limit, offset))
+                    agent_id.extend(receive_data_from_db_socket(cluster_socket).split(' ')[:-1])
 
                 if len(agent_id) > 0:
                     node_agents[node['url']] = agent_id

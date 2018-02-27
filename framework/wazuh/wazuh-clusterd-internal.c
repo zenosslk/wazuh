@@ -257,7 +257,8 @@ void* daemon_socket() {
     char *sql_del_restart = "DELETE FROM is_restarted";
     char *sql_ins_restart = "INSERT INTO is_restarted VALUES (?)";
     // sql sentences to manage agent information table
-    char *sql_sel_node_agents = "SELECT id_agent FROM agent_node WHERE id_node = ?";
+    char *sql_sel_node_agents = "SELECT id_agent FROM agent_node WHERE id_node = ? LIMIT ? OFFSET ?";
+    char *sql_count_node_agents = "SELECT COUNT(*) FROM agent_node WHERE id_node = ?";
     char *sql_sel_agent_node  = "SELECT id_node FROM agent_node WHERE id_agent = ?";
     char *sql_ins_node = "INSERT INTO agent_node VALUES (?,?)";
     char *sql_del_agent_node = "DELETE FROM agent_node WHERE id_agent = ?";
@@ -385,7 +386,13 @@ void* daemon_socket() {
             } else if (cmd != NULL && strcmp(cmd, "selnodeagents") == 0) {
                 sql = sql_sel_node_agents;
                 has1 = true;
+                has2 = true;
+                has3 = true;
                 response_str = true;
+            } else if (cmd != NULL && strcmp(cmd, "countagentnode") == 0) {
+                sql = sql_count_node_agents;
+                has1 = true;
+                count = true;
             } else if (cmd != NULL && strcmp(cmd, "selagentnode") == 0) {
                 sql = sql_sel_agent_node;
                 has1 = true;
@@ -894,7 +901,7 @@ char * inotify_pop() {
 }
 
 void set_address_unix_socket(struct sockaddr_un *addr, char *socket_path) {
-    memset(addr, 0, sizeof(addr));
+    memset(addr, 0, sizeof(&addr));
     addr->sun_family = AF_UNIX;
     strncpy(addr->sun_path, socket_path, sizeof(addr->sun_path)-1);
 }

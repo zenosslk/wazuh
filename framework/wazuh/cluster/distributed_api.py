@@ -14,7 +14,10 @@ import ast
 import json
 from datetime import datetime
 from operator import itemgetter
+from itertools import islice
+
 import logging
+import time
 
 is_py2 = version[0] == '2'
 if is_py2:
@@ -23,66 +26,67 @@ else:
     from queue import Queue as queue
 
 
-def append_node_result_by_type(node, result_node, request_type, current_result=None):
-    request_type = request_type.split(' ')
-    if request_type > 1 and request_type[0] == api_protocol.protocol_messages['DISTRIBUTED_REQUEST']:
-        request_type = request_type[1]
-    if current_result is None:
-        current_result = {}
-    if current_result.get("data") is None:
-        current_result["data"] = {}
-    if current_result["data"].get("items") is None:
-        current_result["data"]["items"] = {}
-    if current_result["data"].get("totalItems") is None:
-        current_result["data"]["totalItems"] = 0
+def merge_results(node, result_node, request_type, final_result=None):
 
-    #current_result[node] = result_node
+    # Empty result_node --> Discard result
+    if result_node.get("data") is None or result_node["data"].get("items") is None:
+        return final_result
 
-    if result_node.get("data") is None:
-        return current_result
-    if result_node["data"].get("items") is None:
-        return current_result
+    start_2 = time.time()
 
-    current_result_items = list(current_result["data"]["items"])
-    total_items  = current_result["data"]["totalItems"]
+    # Empty final_result --> Initialize
+    if final_result.get("data") is None:
+        final_result["data"] = {}
+        final_result["data"]["items"] = {}
+        final_result["data"]["totalItems"] = 0
 
-    # Se recorre el resultado del nodo
-    for agent in result_node["data"]["items"]:
-        id = agent.get("id")
-        last_keep_alive = agent.get("lastKeepAlive")
+        for remote_agent in result_node["data"]["items"]:
+            final_result["data"]["items"][remote_agent['id']] = remote_agent
 
-        # Comparando con el resultado que ya tenemos
-        for i, agent_result in enumerate(current_result["data"]["items"]):
+        final_result["data"]["totalItems"] = result_node["data"]["totalItems"]
+        final_result["data"][node] = result_node["data"]["Total_manager"]
+        final_result["data"]["{}-totalItems".format(str(node))] = result_node["data"]["totalItems"]
 
-            # El agente existe en el resultado que ya teniamos
-            if agent_result.get("id") == id:
-                id_result = agent_result["id"]
-                last_keep_alive_result = agent_result.get("lastKeepAlive")
+        end_2 = time.time()
+        elapsed_time_2 = end_2 - start_2
 
-                # El agente del resultado no es never connected (tiene last keep alive)
-                if last_keep_alive_result is not None:
+        final_result["Merging"]["{}".format(str(node))] = {}
+        final_result["Merging"]["{}".format(str(node))]["Agents received"] = len(result_node["data"]["items"])
+        final_result["Merging"]["{}".format(str(node))]["Time"] = elapsed_time_2
+        return final_result
 
-                    # Si el que teniamos no tiene last keep alive --> Nos quedamos con el del resultado
-                    if last_keep_alive is None:
-                        current_result_items[i] = agent_result
-                    else:
-                        # Comparamos el lastkeepalive de ambos agentes
-                        last_keep_alive_time = datetime.strptime(last_keep_alive, '%Y-%m-%d %H:%M:%S')
-                        last_keep_alive_time_result = datetime.strptime(last_keep_alive_result, '%Y-%m-%d %H:%M:%S')
-                        if last_keep_alive_time > last_keep_alive_time_result:
-                            current_result_items[i] = agent_result
-                break
+    else:
+        # Add totalItems to final_result
+        final_result["data"]["totalItems"] = final_result["data"]["totalItems"] + result_node["data"]["totalItems"]
+        final_result["data"][node] = result_node["data"]["Total_manager"]
+        final_result["data"]["{}-totalItems".format(str(node))] = result_node["data"]["totalItems"]
+
+    for remote_agent in result_node["data"]["items"]:
+        if remote_agent['id'] in final_result["data"]["items"]:
+            # Agent in result_node haven't last keep alive --> Continue
+            if remote_agent.get('lastKeepAlive') is None:
+                continue
+            elif final_result["data"]["items"][remote_agent['id']].get('lastKeepAlive') is None:
+                # Agent in final_result haven't last keep alive --> Selecting remote agent
+                final_result["data"]["items"][remote_agent['id']]= remote_agent
+            else:
+                # To compare the lastkeepalive of both agents
+                last_keep_alive_time_result = datetime.strptime(final_result["data"]["items"][remote_agent['id']].get('lastKeepAlive'), '%Y-%m-%d %H:%M:%S')
+                last_keep_alive_time_node = datetime.strptime(remote_agent['lastKeepAlive'], '%Y-%m-%d %H:%M:%S')
+                if last_keep_alive_time_result > last_keep_alive_time_node:
+                    final_result["data"]["items"][remote_agent['id']]= remote_agent
+
         else:
-            # No existe el ID en el resultado final -> Se anade al final
-            current_result_items.append(agent)
-            total_items = total_items+1
+            final_result["data"]["items"][remote_agent['id']] = remote_agent
 
-        current_result["data"]["items"] = current_result_items
-        current_result["data"]["totalItems"] = total_items
+    end_2 = time.time()
+    elapsed_time_2 = end_2 - start_2
 
+    final_result["Merging"]["{}".format(str(node))] = {}
+    final_result["Merging"]["{}".format(str(node))]["Time"] = elapsed_time_2
+    final_result["Merging"]["{}".format(str(node))]["Agents received"] = len(result_node["data"]["items"])
 
-
-    return current_result
+    return final_result
 
 
 def send_request_to_node(host, config_cluster, header, data, result_queue):
@@ -101,9 +105,11 @@ def send_request_to_nodes(config_cluster, header, data, nodes):
     result_node = {}
     result_nodes = {}
     result_queue = queue()
+    result = {}
 
+    start_2 = time.time()
     for node in nodes:
-        logging.info("Sending {0} request from {1} to {2} (Message: '{3}')".format(header, get_node()['node'], node, str(data[node])))
+        logging.warning("Sending {0} request from {1} to {2} (Message: '{3}')".format(header, get_node()['node'], node, str(data[node])))
         t = threading.Thread(target=send_request_to_node, args=(str(node), config_cluster, header, json.dumps(data[node]), result_queue))
         threads.append(t)
         t.start()
@@ -111,8 +117,20 @@ def send_request_to_nodes(config_cluster, header, data, nodes):
         result_nodes[node] = result_node
     for t in threads:
         t.join()
+    end_2 = time.time()
+    elapsed_time_2 = end_2 - start_2
+    result["Receiving elapsed-time"] = elapsed_time_2
+
+    result["Merging"] = {}
+    start_2 = time.time()
     for node, result_node in result_nodes.iteritems():
-        result = append_node_result_by_type(node=node, result_node=result_node, request_type=header, current_result=result)
+        result = merge_results(node=node, result_node=result_node, request_type=header, final_result=result)
+    end_2 = time.time()
+    elapsed_time_2 = end_2 - start_2
+    result["Merging"]["Total time"] = elapsed_time_2
+    result["Merging"]["Final agents"] = len(result["data"]["items"])
+    del result["data"]
+
     return result
 
 
@@ -208,15 +226,9 @@ def distributed_api_request(request_type, node_agents={}, args={}, from_cluster=
     :param from_cluster: Request comes from the cluster. If request is from cluster, it not be redirected.
     :return: Output of API distributed call in JSON.
     """
+    start = time.time()
     config_cluster = read_config()
     result, result_local = None, None
-
-    # Not from cluster and not elected mater --> Redirect to master
-    '''
-    if not from_cluster and get_actual_master()['name'] != config_cluster["node_name"]:
-        args.append(request_type)
-        request_type = api_protocol.protocol_messages['MASTER_FORW']
-    '''
 
     limit = common.database_limit
     offset = 0
@@ -230,37 +242,20 @@ def distributed_api_request(request_type, node_agents={}, args={}, from_cluster=
     if args.get('sort'):
         sort = args['sort']
         del args['sort']
+    args['limit'] = 40000
 
     header, data, nodes = prepare_message(request_type=request_type, node_agents=node_agents, args=args)
-
-    # Elected master resolves his own request in local
-    '''
-    if (get_actual_master()['name'] == config_cluster["node_name"] \
-        and get_ip_from_name(config_cluster["node_name"]) in node_agent):
-        node_local = get_ip_from_name(config_cluster["node_name"])
-        try:
-            result_local = {'data':execute_request(request_type=request_type,
-                            args=data[node_local][protocol_messages['ARGS']],
-                            agents=data[node_local][protocol_messages['NODEAGENTS']],
-                            from_cluster=True), 'error':0}
-        except Exception as e:
-            result_local = {'data':str(e), 'error':1}
-        del data[node_local]
-        node_agents.remove('xyz');
-    '''
 
     if len(data) > 0:
         result = apply_pagination_and_sort(
             send_request_to_nodes(config_cluster=config_cluster, header=header, data=data, nodes=nodes),
             limit=limit, offset=offset, sort=sort);
 
+    end = time.time()
+    elapsed_time = end - start
+    result["Total elapsed-time"] = elapsed_time
 
-
-    # Merge local and distributed results
-    '''
-    if result_local is not None:
-        result = append_node_result_by_type(get_ip_from_name(config_cluster["node_name"]), result_local, request_type, current_result=result, nodes=nodes)
-    '''
+    result["Managers limit"] = args['limit']
 
     return result
 
@@ -288,11 +283,6 @@ def get_node_agent(agent_id):
 
 def received_request(kwargs, request_function, request_type, from_cluster=False):
     node_agents = {}
-    if kwargs.get('agent_id'):
-        node_agents = {}
-    elif kwargs.get('node_id'):
-        node_agents = get_dict_nodes(kwargs['node_id'])
-        del kwargs['node_id']
 
     if not request_type in api_protocol.all_list_requests.keys() or \
             is_a_local_request() or from_cluster:
@@ -300,5 +290,11 @@ def received_request(kwargs, request_function, request_type, from_cluster=False)
     else:
         if not is_cluster_running():
             raise WazuhException(3015)
+
+        if kwargs.get('agent_id'):
+            node_agents = {}
+        elif kwargs.get('node_id'):
+            node_agents = get_dict_nodes(kwargs['node_id'])
+            del kwargs['node_id']
 
         return distributed_api_request(request_type=request_type, node_agents=node_agents, args=kwargs)

@@ -303,7 +303,7 @@ def get_nodes(updateDBname=False):
             continue
 
         if config_cluster['node_type'] == 'master' or \
-           response['type'] == 'master' or url == "localhost":
+           response['type'] == 'master' or response["localhost"]:
             data.append({'url':url, 'node':response['node'], 'localhost': response['localhost'],
                          'status':'connected', 'cluster':response['cluster']})
 

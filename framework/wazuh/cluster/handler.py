@@ -488,7 +488,7 @@ def get_remote_nodes(connected=True, updateDBname=False):
     # search the index of the localhost in the cluster
     try:
         localhost_index = next (x[0] for x in enumerate(cluster) if x[1][1])
-    except ValueError as e:
+    except StopIteration as e:
         logging.error("Cluster nodes are not correctly configured at ossec.conf.")
         exit(1)
 

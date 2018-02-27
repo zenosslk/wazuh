@@ -135,6 +135,7 @@ class WazuhClusterHandler(asynchat.async_chat):
                     kill(child_pid, SIGUSR1)
 
             elif message == protocol_messages['DISTRIBUTED_REQUEST']:
+                logging.warning("clusterd: Received distributed request")
                 api_request_type = self.command[1]
                 data = json.loads(self.f.decrypt(response[common.cluster_sync_msg_size:]))
                 from_cluster = True

@@ -28,6 +28,9 @@ import re
 import fcntl
 from json import loads
 
+import logging
+import time
+
 try:
     from urllib2 import urlopen, URLError, HTTPError
 except ImportError:
@@ -770,7 +773,12 @@ class Agent:
         :param search: Looks for items with the specified string.
         :return: Dictionary: {'items': array of items, 'totalItems': Number of items (without applying the limit)}
         """
+        logging.warning("Received request get agents")
+        start = time.time()
 
+
+
+        start2 = time.time()
         db_global = glob(common.database_path_global)
         if not db_global:
             raise WazuhException(1600)
@@ -891,7 +899,13 @@ class Agent:
             if not select_os_uname:
                 select_fields.add('os_uname')
                 set_select_fields.add('os_uname')
+
+
         conn.execute(query.format(','.join(select_fields)), request)
+        end2 = time.time()
+        elapsed_time2 = end2 - start2
+        logging.warning("Time to prepare query and get from database --> {}".format(elapsed_time2))
+        start2 = time.time()
 
         data['items'] = []
 
@@ -987,6 +1001,15 @@ class Agent:
                 data_tuple['ip'] = '127.0.0.1'
 
             data['items'].append(data_tuple)
+
+
+        end2 = time.time()
+        elapsed_time2 = end2 - start2
+        logging.warning("Time to get values --> {}".format(elapsed_time2))
+        end = time.time()
+        elapsed_time = end - start
+        logging.warning("Time to get all agents --> {}".format(elapsed_time))
+        data["Total_manager"] = elapsed_time
 
         return data
 

@@ -183,9 +183,9 @@ class WazuhClusterHandler(asynchat.async_chat):
             sent = self.send(msg[i:next_i])
             if sent == 4096 or next_i == msg_len:
                 i = next_i
-            logging.debug("SERVER: Sending {} of {}".format(i, msg_len))
+            #logging.debug("SERVER: Sending {} of {}".format(i, msg_len))
 
-        logging.debug("Data sent to {0}".format(self.addr))
+        logging.debug("Sent {}/{} Bytes to {}".format(i, msg_len, self.addr))
         self.handle_close()
 
 class WazuhClusterServer(asyncore.dispatcher):

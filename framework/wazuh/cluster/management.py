@@ -98,7 +98,8 @@ class WazuhClusterClient(asynchat.async_chat):
         nil, t, v, tbinfo = asyncore.compact_traceback()
         self.close()
         if InvalidToken == t or InvalidSignature == t:
-            raise WazuhException(3010, "Could not decrypt message from {0}".format(self.addr[0]))
+            logging.error("Could not decrypt message")
+            raise WazuhException(3010, "Could not decrypt message")
         else:
             raise WazuhException(3010, str(v))
 
@@ -106,6 +107,7 @@ class WazuhClusterClient(asynchat.async_chat):
         self.received_data.append(data)
 
     def found_terminator(self):
+        logging.warning("Received {} Bytes".format(len(''.join(self.received_data))))
         self.response = json.loads(self.f.decrypt(''.join(self.received_data)))
         self.close()
 

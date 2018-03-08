@@ -30,6 +30,10 @@ def merge_results(node, result_node, request_type, final_result=None):
 
     # Empty result_node --> Discard result
     if result_node.get("data") is None or result_node["data"].get("items") is None:
+        if final_result.get("data") is None:
+            final_result["data"] = {}
+            final_result["data"]["items"] = {}
+            final_result["data"]["totalItems"] = 0
         return final_result
 
     start_2 = time.time()

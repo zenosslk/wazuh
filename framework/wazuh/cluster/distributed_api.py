@@ -15,6 +15,7 @@ import json
 from datetime import datetime
 from operator import itemgetter
 from itertools import islice
+import multiprocessing as mp
 
 import logging
 import time
@@ -104,23 +105,27 @@ def send_request_to_node(host, config_cluster, header, data, result_queue):
 
 
 def send_request_to_nodes(config_cluster, header, data, nodes):
-    threads = []
+    process = []
     result = {}
     result_node = {}
     result_nodes = {}
-    result_queue = queue()
     result = {}
+
 
     start_2 = time.time()
     for node in nodes:
         logging.warning("Sending {0} request from {1} to {2} (Message: '{3}')".format(header, get_node()['node'], node, str(data[node])))
-        t = threading.Thread(target=send_request_to_node, args=(str(node), config_cluster, header, json.dumps(data[node]), result_queue))
-        threads.append(t)
-        t.start()
-        result_node = result_queue.get()
-        result_nodes[node] = result_node
-    for t in threads:
-        t.join()
+
+        result_queue = mp.Queue()
+        p = mp.Process(target=send_request_to_node, args=(str(node), config_cluster, header, json.dumps(data[node]), result_queue))
+        p.start()
+        process.append(p)
+
+        result_nodes[node] = result_queue.get()
+
+    for p in process:
+        p.join()
+
     end_2 = time.time()
     elapsed_time_2 = end_2 - start_2
     result["Receiving elapsed-time"] = elapsed_time_2

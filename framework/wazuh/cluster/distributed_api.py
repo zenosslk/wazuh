@@ -128,6 +128,7 @@ def send_request_to_nodes(config_cluster, header, data, nodes):
     result["Merging"] = {}
     start_2 = time.time()
     for node, result_node in result_nodes.iteritems():
+        #logging.warning("{} ---- {}".format(node, result_node))
         result = merge_results(node=node, result_node=result_node, request_type=header, final_result=result)
     end_2 = time.time()
     elapsed_time_2 = end_2 - start_2
@@ -246,7 +247,8 @@ def distributed_api_request(request_type, node_agents={}, args={}, from_cluster=
     if args.get('sort'):
         sort = args['sort']
         del args['sort']
-    args['limit'] = 40000
+
+    args['limit'] = None
 
     header, data, nodes = prepare_message(request_type=request_type, node_agents=node_agents, args=args)
 
@@ -287,17 +289,21 @@ def get_node_agent(agent_id):
 
 def received_request(kwargs, request_function, request_type, from_cluster=False):
     node_agents = {}
+    if kwargs.get('agent_id'):
+        node_agents = get_agents_by_node(kwargs['agent_id'])
 
     if not request_type in api_protocol.all_list_requests.keys() or \
             is_a_local_request() or from_cluster:
         return request_function(**kwargs)
     else:
         if not is_cluster_running():
-            raise WazuhException(3015)
+            logging.warning("Cluster is available but is not running properly")
+            if not kwargs.get('node_id'): # It will be resolved in local
+                return request_function(**kwargs)
+            else: # It must be distributed
+                raise WazuhException(3016)
 
-        if kwargs.get('agent_id'):
-            node_agents = {}
-        elif kwargs.get('node_id'):
+        if kwargs.get('node_id'):
             node_agents = get_dict_nodes(kwargs['node_id'])
             del kwargs['node_id']
 

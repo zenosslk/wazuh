@@ -294,15 +294,20 @@ def received_request(kwargs, request_function, request_type, from_cluster=False)
     node_agents = {}
     if kwargs.get('agent_id'):
         node_agents = get_agents_by_node(kwargs['agent_id'])
-    elif kwargs.get('node_id'):
-        node_agents = get_dict_nodes(kwargs['node_id'])
-        del kwargs['node_id']
 
     if not request_type in api_protocol.all_list_requests.keys() or \
             is_a_local_request() or from_cluster:
         return request_function(**kwargs)
     else:
         if not is_cluster_running():
-            raise WazuhException(3016)
+            logging.warning("Cluster is available but is not running properly")
+            if not kwargs.get('node_id'): # It will be resolved in local
+                return request_function(**kwargs)
+            else: # It must be distributed
+                raise WazuhException(3016)
+
+        if kwargs.get('node_id'):
+            node_agents = get_dict_nodes(kwargs['node_id'])
+            del kwargs['node_id']
 
         return distributed_api_request(request_type=request_type, node_agents=node_agents, args=kwargs)

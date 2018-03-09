@@ -14,6 +14,8 @@ import json
 import stat
 import re
 from itertools import groupby, chain
+from xml.etree.ElementTree import fromstring
+from operator import itemgetter
 
 try:
     from subprocess import check_output
@@ -336,7 +338,17 @@ def md5(fname):
             hash_md5.update(chunk)
     return hash_md5.hexdigest()
 
-def plain_dict_to_nested_dict(data, force_fields=[]):
+
+def get_fields_to_nest(fields, force_fields=[]):
+    nest = {k:set(filter(lambda x: x != k, chain.from_iterable(g)))
+             for k,g in groupby(map(lambda x: x.split('_'), sorted(fields)),
+             key=lambda x:x[0])}
+    nested = filter(lambda x: len(x[1]) > 1 or x[0] in force_fields, nest.items())
+    non_nested = set(filter(lambda x: x.split('_')[0] not in map(itemgetter(0), nested), fields))
+    return nested, non_nested
+
+
+def plain_dict_to_nested_dict(data, nested=None, non_nested=None, force_fields=[]):
     """
     Turns an input dictionary with "nested" fields in form
                 field_subfield
@@ -367,34 +379,33 @@ def plain_dict_to_nested_dict(data, force_fields=[]):
     }
 
     :param data: dictionary to nest
+    :param nested: fields to nest
     :param force_fields: fields to force nesting in
     """
     # separate fields and subfields:
     # nested = {'board': ['serial'], 'cpu': ['cores', 'mhz', 'name'], 'ram': ['free', 'total']}
-    nested = {k:list(filter(lambda x: x != k, chain.from_iterable(g))) 
-             for k,g in groupby(map(lambda x: x.split('_'), sorted(data.keys())), 
-             key=lambda x:x[0])}
-
+    keys = set(data.keys())
+    if nested is None:
+        nested, non_nested = get_fields_to_nest(keys, force_fields)
     # create a nested dictionary with those fields that have subfields
     # (board_serial won't be added because it only has one subfield)
     #  nested_dict = {
     #       'cpu': {
-    #           'cores': '4', 
+    #           'cores': '4',
     #           'mhz': '2394.464',
     #           'name': 'Intel(R) Core(TM) i7-4700MQ CPU @ 2.40GHz'
-    #       }, 
+    #       },
     #       'ram': {
-    #           'free': '1669524', 
+    #           'free': '1669524',
     #           'total': '2045956'
     #       }
     #    }
-    nested_dict = {f:{sf:data['{0}_{1}'.format(f,sf)] for sf in sfl} for f,sfl 
-                  in nested.items() if len(sfl) > 1 or f in force_fields}
+    nested_dict = {f:{sf:data['_'.join([f,sf])] for sf in sfl if '_'.join([f,sf]) in keys} 
+                  for f,sfl in nested}
 
     # create a dictionary with the non nested fields
     # non_nested_dict = {'board_serial': 'BSS-0123456789'}
-    non_nested_dict = {f:data[f] for f in data.keys() if f.split('_')[0] 
-                       not in nested_dict.keys()}
+    non_nested_dict = {f:data[f] for f in non_nested & keys}
 
     # append both dictonaries
     nested_dict.update(non_nested_dict)
@@ -414,6 +425,25 @@ def create_exception_dic(id, e):
     exception_dic['id'] = id
     exception_dic['error'] = {'message': e.message, 'code': e.code}
     return exception_dic
+
+
+def load_wazuh_xml(xml_path):
+    with open(xml_path) as f:
+        data = f.read()
+
+    # -- characters are not allowed in XML comments
+    xml_comment = re.compile(r"(<!--(.*?)-->)", flags=re.MULTILINE | re.DOTALL)
+    for comment in xml_comment.finditer(data):
+        good_comment = comment.group(2).replace('--','..')
+        data = data.replace(comment.group(2), good_comment)
+
+    # < characters should be scaped as &lt; unless < is starting a <tag> or a comment
+    data = re.sub(r"<(?!/?[\w='$,#\"\. -]+>|!--)", "&lt;", data)
+
+    # & characters should be scaped if they don't represent an &entity;
+    data = re.sub(r"&(?!\w+;)", "&amp;", data)
+
+    return fromstring('<root_tag>' + data + '</root_tag>')
 
 
 class WazuhVersion:

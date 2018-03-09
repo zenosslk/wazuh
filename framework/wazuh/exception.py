@@ -34,6 +34,7 @@ class WazuhException(Exception):
         1103: 'Invalid field in section',
         1104: 'Invalid type',
         1105: 'Error reading API configuration',
+        1106: 'Requested section not present in configuration',
 
         # Rule: 1200 - 1299
         1200: 'Error reading rules from ossec.conf',
@@ -120,7 +121,8 @@ class WazuhException(Exception):
         3012: 'Received an old file',
         3013: 'Cluster is disabled',
         3014: 'Manager name or IP incorrect',
-        3015: 'Cluster is not running'
+        3015: 'Cannot access directory',
+        3016: 'Cluster is not running'
 
         # > 9000: Authd
     }

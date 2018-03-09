@@ -197,6 +197,7 @@ int execute_db_command(char *response, sqlite3 *db, sqlite3_stmt **res) {
     // sql sentence to manage IP from name
     char *sql_sel_by_name = "SELECT manager_file_status.id_manager as id_manager, manager_file_status.id_file as id_file, manager_file_status.status as status FROM node_name_ip INNER JOIN manager_file_status ON manager_file_status.id_manager = node_name_ip.id_manager WHERE node_name_ip.name = ? LIMIT ? OFFSET ?";
     char *sql_sel_ip_by_name = "SELECT id_manager FROM node_name_ip WHERE name = ?";
+    char *sql_sel_name_by_ip = "SELECT name FROM node_name_ip WHERE id_manager = ?";
     char *sql_upd_ip_name = "UPDATE node_name_ip SET name = ? WHERE id_manager = ?";
     char *sql_ins_ip_name = "INSERT OR REPLACE INTO node_name_ip VALUES (?,?)";
     // sql sentences to manage restarting table
@@ -284,6 +285,10 @@ int execute_db_command(char *response, sqlite3 *db, sqlite3_stmt **res) {
         strcpy(response, " ");
     } else if (cmd != NULL && strcmp(cmd, "getip") == 0) {
         sql = sql_sel_ip_by_name;
+        has1 = true; // name
+        response_str = true;
+    } else if (cmd != NULL && strcmp(cmd, "getname") == 0) {
+        sql = sql_sel_name_by_ip;
         has1 = true; // name
         response_str = true;
     } else if (cmd != NULL && strcmp(cmd, "updatename") == 0) {

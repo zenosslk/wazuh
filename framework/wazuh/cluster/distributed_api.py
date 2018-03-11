@@ -31,7 +31,7 @@ def append_node_result_by_type(node, result_node, request_type, current_result=N
     if current_result is None:
         current_result = {}
 
-    if 'restart' in request_type:
+    if 'restart' in request_type and result_node['error'] == 0:
         if isinstance(result_node.get('data'), dict):
             if result_node.get('data').get('affected_agents') != None:
                 if current_result.get('affected_agents') is None:
@@ -53,7 +53,7 @@ def append_node_result_by_type(node, result_node, request_type, current_result=N
             if current_result.get('data') is None:
                 current_result = result_node
 
-    elif isinstance(current_result, dict) and request_type in api_protocol.all_list_requests.keys():
+    elif isinstance(current_result, dict) and request_type in api_protocol.all_list_requests.keys() and result_node['error'] == 0:
         if result_node.get('data'):
             result_node = result_node['data']
         if current_result.get('items') is None:
@@ -79,7 +79,7 @@ def append_node_result_by_type(node, result_node, request_type, current_result=N
         # if current_result.get('totalItems') is None:
         #     current_result['totalItems'] = 0
         # current_result['totalItems'] += 1
-    else:
+    elif result_node['error'] == 0:
         if isinstance(result_node, dict):
             if not result_node.get('data') is None:
                 current_result = result_node['data']
@@ -88,6 +88,13 @@ def append_node_result_by_type(node, result_node, request_type, current_result=N
                 current_result['error'] = result_node['error']
         else:
             current_result = result_node
+    else:
+        if current_result.get('items') is None:
+            current_result['items'] = []
+        current_result['items'].append(result_node)
+        if not current_result.get('totalItems'):
+            current_result['totalItems'] = 0
+        current_result['totalItems'] += 1
 
     return current_result
 
@@ -96,8 +103,11 @@ def send_request_to_node(host, config_cluster, header, data, result_queue):
     header = "{0} {1}".format(header, '-'*(common.cluster_protocol_plain_size - len(header + " ")))
     error, response = send_request(host=host, port=config_cluster["port"], key=config_cluster['key'],
                         data=header, file=data.encode())
-    if error != 0 or ((isinstance(response, dict) and response.get('error') is not None and response['error'] != 0)):
-        result_queue.put({'node': host, 'reason': "{0} - {1}".format(error, response), 'error': 1})
+    if error != 0:
+        result_queue.put({'data':response, 'node':host, 'error':error})
+    elif response['error'] != 0:
+        response['node'] = host
+        result_queue.put(response)
     else:
         result_queue.put(response)
 
@@ -337,25 +347,9 @@ def get_agents_by_node(agent_id):
 
 def received_request(kwargs, request_function, request_type, from_cluster=False):
     node_agents = {}
-
-    if kwargs.get('offset'):
-        offset = int(kwargs['offset'])
-        kwargs['offset'] = 0
-    else:
-        offset = 0
-
-    if kwargs.get('limit'):
-        limit = int(kwargs['limit'])
-        kwargs['limit'] = 0
-    else:
-        limit = common.database_limit
-
-    if kwargs.get('agent_id'):
-        node_agents = get_agents_by_node(kwargs['agent_id'])
-    elif kwargs.get('node_id'):
+    if kwargs.get('node_id'):
         node_agents = get_dict_nodes(kwargs['node_id'])
         del kwargs['node_id']
-
 
     if not request_type in api_protocol.all_list_requests.keys() or \
             is_a_local_request() or from_cluster:
@@ -363,5 +357,18 @@ def received_request(kwargs, request_function, request_type, from_cluster=False)
     else:
         if not is_cluster_running():
             raise WazuhException(3015)
+        if kwargs.get('offset'):
+            offset = int(kwargs['offset'])
+            kwargs['offset'] = 0
+        else:
+            offset = 0
+
+        if kwargs.get('limit'):
+            limit = int(kwargs['limit'])
+            kwargs['limit'] = 0
+        else:
+            limit = common.database_limit
+        if kwargs.get('agent_id'):
+            node_agents = get_agents_by_node(kwargs['agent_id'])
 
         return distributed_api_request(request_type=request_type, node_agents=node_agents, args=kwargs, limit=limit, offset=0)

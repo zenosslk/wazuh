@@ -39,18 +39,15 @@ except:
     compression = zipfile.ZIP_STORED
 
 
-def update_agent_database(agent_info_name, node_id):
-    regex = re.compile(r"(\S+)-(any|\d+.\d+.\d+.\d+|\d+.\d+.\d+.\d+\/\d+)")
-    try:
-        name = regex.match(agent_info_name).group(1)
-    except AttributeError as e:
-        raise WazuhException(3017, agent_info_name)
-    agent_id = Agent.get_agent_by_name(name)['id']
+def update_agent_database(agent_ids, node_id):
+    agent_ids_list = agent_ids.split('*')
+    logging.debug("Receving {} ids from {}".format(len(agent_ids_list), node_id))
     cluster_socket = connect_to_db_socket()
-    send_to_socket(cluster_socket, "delagentnode {}".format(agent_id))
+    send_to_socket(cluster_socket, "delagentnode {}".format(" ".join(agent_ids_list)))
     received = receive_data_from_db_socket(cluster_socket)
-    send_to_socket(cluster_socket, "insnodeagent {} {}".format(agent_id, node_id))
+    send_to_socket(cluster_socket, "insnodeagent {}".format(" ".join(["{} {}".format(agent_id, node_id) for agent_id in agent_ids_list])))
     received = receive_data_from_db_socket(cluster_socket)
+    cluster_socket.close()
 
 
 def get_file_info(filename, cluster_items, node_type):

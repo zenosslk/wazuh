@@ -6,6 +6,7 @@ try:
     import asyncore
     import asynchat
     import socket
+    import select
     import json
     from distutils.util import strtobool
     from sys import argv, exit, path
@@ -46,6 +47,7 @@ try:
         from wazuh.cluster.distributed_api import *
         from wazuh.cluster.api_protocol_messages import *
         from wazuh.exception import WazuhException
+        from wazuh.agent import Agent
         from wazuh.utils import check_output
         from wazuh.pyDaemonModule import pyDaemon, create_pid, delete_pid
     except Exception as e:
@@ -137,7 +139,7 @@ class WazuhClusterHandler(asynchat.async_chat):
 
             elif message == 'agentssocket':
                 res = "Command OK"
-                update_agent_database(self.command[1], self.addr)
+                update_agent_database(self.f.decrypt(response[common.cluster_sync_msg_size:]).decode(), self.addr)
 
             elif message == protocol_messages['DISTRIBUTED_REQUEST']:
                 api_request_type = self.command[1]
@@ -158,13 +160,10 @@ class WazuhClusterHandler(asynchat.async_chat):
                     agents = data[protocol_messages['NODEAGENTS']]
                     args['agent_id'] = agents
 
-                logging.warning("clusterd: Received api_request_type='" + str(api_request_type) + "' agents='" + str(agents) + "' args='" + str(args)) #TODO: Remove this line.
+                logging.warning("clusterd: Received api_request_type='" + str(api_request_type) + "' agents='" + str(len(agents)) + "' args='" + str(args)) #TODO: Remove this line.
 
-                try:
-                    res = received_request(kwargs=args, request_function=all_list_requests[api_request_type],
-                                                request_type=api_request_type, from_cluster=from_cluster)
-                except Exception as e:
-                    res = str(e)
+                res = received_request(kwargs=args, request_function=all_list_requests[api_request_type],
+                                            request_type=api_request_type, from_cluster=from_cluster)
 
             logging.debug("Command {0} executed for {1}".format(self.command[0], self.addr))
 
@@ -357,6 +356,14 @@ def signal_handler(n_signal, frame):
 
 
 def run_internal_socket(cluster_config):
+    def get_agent_id(agent_info_name):
+        regex = re.compile(r"(\S+)-(any|\d+.\d+.\d+.\d+|\d+.\d+.\d+.\d+\/\d+)")
+        try:
+            name = regex.match(agent_info_name).group(1)
+        except AttributeError as e:
+            raise WazuhException(3017, agent_info_name)
+        return Agent.get_agent_by_name(name)['id']
+
     try:
         logging.info("Starting internal socket")
         agent_socket = "{}/queue/ossec/cluster_agents".format(common.ossec_path)
@@ -365,36 +372,64 @@ def run_internal_socket(cluster_config):
             remove(agent_socket)
         except OSError:
             pass
+        sock.setblocking(0)
         sock.bind(agent_socket)
         sock.listen(1)
+        received_agents = []
+        last_received_update = 0
+        max_waiting_time = 5
+        max_length = 1000
+        max_retries = 100
+        n_retries = 0
 
-        while True:
-            conn, addr = sock.accept()
-            data = receive_data_from_db_socket(conn)
-            conn.send("Command OK")
-            logging.info("Received in agents socket: {}".format(data))
+        inputs = [sock]
+        message_queues = {}
 
+        while n_retries <= max_retries:
             try:
                 node_info = next (x for x in get_nodes()['items'] if x['type'] == 'master')
+                break
             except StopIteration as e:
-                raise WazuhException(3018)
+                if n_retries < max_retries:
+                    n_retries += 1
+                else:
+                    raise WazuhException(3018)
 
-            logging.debug("Master node is: {}".format(node_info))
-            if node_info['localhost']:
-                update_agent_database(data.split(' ')[1], node_info['url'])
-            else:
-                error, res = send_request(host=node_info['url'], port=cluster_config['port'], key=cluster_config['key'],
-                                          data="{} {}".format(data, '-'*(common.cluster_protocol_plain_size - len(data) - 1)))
-                logging.debug("Response from master node: {} - {}".format(error, res))
-                if error:
-                    logging.error("Error sending agent update to the master: {}".format(res))
-                elif res['error']:
-                    logging.error("Error in sent agent update: {}".format(res['data']))
+        logging.debug("Master node is: {}".format(node_info))
+
+        while True:
+            readable, _, _ = select.select(inputs, [], [], 0)
+            for s in readable:
+                if s is sock:
+                    conn, addr = sock.accept()
+                    cmd, agent_name = receive_data_from_db_socket(conn).split(' ')
+                    logging.debug("Received in agents socket: {} {}".format(cmd, agent_name))
+                    if cmd == "agentssocket":
+                        last_received_update = time()
+                        conn.send("Command OK")
+                        received_agents.append(get_agent_id(agent_name))
+                    else:
+                        conn.send("Wrong command received in agents socket: {} {}".format(cmd, agent_name))
+
+            if len(received_agents) > 0 and (len(received_agents) >= max_length or \
+                    time() - last_received_update >= max_waiting_time):
+
+                if not node_info['localhost']:
+                    error, res = send_request(host=node_info['url'], port=cluster_config['port'], key=cluster_config['key'],
+                                              data="agentssocket {}".format('-'*(common.cluster_protocol_plain_size - len('agentssocket '))),
+                                              file='*'.join(received_agents).encode())
+                    logging.debug("Response from master node: {} - {}".format(error, res))
+                    if error:
+                        logging.error("Error sending agent update to the master: {}".format(res))
+                    elif res['error']:
+                        logging.error("Error in sent agent update: {}".format(res['data']))
+                    else:
+                        received_agents = []
 
 
     except Exception as e:
         logging.error("Error in internal cluster socket: {}".format(str(e)))
-        raise WazuhException(3016, str(e))
+        # raise WazuhException(3016, str(e))
 
 
 def run_internal_daemon(debug):

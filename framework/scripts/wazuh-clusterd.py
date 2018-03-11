@@ -74,8 +74,8 @@ class WazuhClusterHandler(asynchat.async_chat):
         self.addr = addr
         self.f = Fernet(key.encode('base64','strict'))
         self.set_terminator('\n\t\t\n')
-        self.received_data=[]
-        self.data=""
+        self.received_data = []
+        self.data = ""
         self.counter = 0
         self.node_type = node_type
         self.requests_queue = requests_queue
@@ -190,12 +190,11 @@ class WazuhClusterHandler(asynchat.async_chat):
         while i < msg_len:
             next_i = i+4096 if i+4096 < msg_len else msg_len
             sent = self.send(msg[i:next_i])
-            if sent == 4096 or next_i == msg_len:
-                i = next_i
-            logging.debug("SERVER: Sending {} of {}".format(i, msg_len))
+            i += sent
 
-        logging.debug("Data sent to {0}".format(self.addr))
+        logging.debug("SERVER: Sent {}/{} bytes to {}".format(i, msg_len, self.addr))
         self.handle_close()
+
 
 class WazuhClusterServer(asyncore.dispatcher):
 
@@ -361,7 +360,7 @@ def run_internal_socket(cluster_config):
         try:
             name = regex.match(agent_info_name).group(1)
         except AttributeError as e:
-            raise WazuhException(3017, agent_info_name)
+            raise WazuhException(3018, agent_info_name)
         return Agent.get_agent_by_name(name)['id']
 
     try:
@@ -393,7 +392,7 @@ def run_internal_socket(cluster_config):
                 if n_retries < max_retries:
                     n_retries += 1
                 else:
-                    raise WazuhException(3018)
+                    raise WazuhException(3019)
 
         logging.debug("Master node is: {}".format(node_info))
 
@@ -402,7 +401,7 @@ def run_internal_socket(cluster_config):
             for s in readable:
                 if s is sock:
                     conn, addr = sock.accept()
-                    cmd, agent_name = receive_data_from_db_socket(conn).split(' ')
+                    _, cmd, agent_name = receive_data_from_db_socket(conn).split(' ')
                     logging.debug("Received in agents socket: {} {}".format(cmd, agent_name))
                     if cmd == "agentssocket":
                         last_received_update = time()
@@ -429,7 +428,7 @@ def run_internal_socket(cluster_config):
 
     except Exception as e:
         logging.error("Error in internal cluster socket: {}".format(str(e)))
-        # raise WazuhException(3016, str(e))
+        # raise WazuhException(3017, str(e))
 
 
 def run_internal_daemon(debug):

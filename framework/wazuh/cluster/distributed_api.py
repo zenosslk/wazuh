@@ -316,7 +316,7 @@ def get_agents_by_node(agent_id):
             node_list = get_nodes()['items']
             all_ids = set(map(itemgetter('id'), Agent.get_agents_overview(select={'fields':['id']}, limit=None)['items'])) - {'000'}
             cluster_socket = connect_to_db_socket()
-            
+
             for node in node_list:
                 send_to_socket(cluster_socket, "countagentnode {}".format(node['url']))
                 total_agents = int(receive_data_from_db_socket(cluster_socket))
@@ -347,16 +347,17 @@ def get_agents_by_node(agent_id):
 
 def received_request(kwargs, request_function, request_type, from_cluster=False):
     node_agents = {}
-    if kwargs.get('node_id'):
-        node_agents = get_dict_nodes(kwargs['node_id'])
-        del kwargs['node_id']
-
     if not request_type in api_protocol.all_list_requests.keys() or \
             is_a_local_request() or from_cluster:
         return request_function(**kwargs)
     else:
         if not is_cluster_running():
-            raise WazuhException(3015)
+            logging.warning("Cluster is available but is not running properly")
+            if not kwargs.get('node_id'): # It will be resolved in local
+                return request_function(**kwargs)
+            else: # It must be distributed
+                raise WazuhException(3016)
+
         if kwargs.get('offset'):
             offset = int(kwargs['offset'])
             kwargs['offset'] = 0
@@ -368,7 +369,12 @@ def received_request(kwargs, request_function, request_type, from_cluster=False)
             kwargs['limit'] = 0
         else:
             limit = common.database_limit
+
         if kwargs.get('agent_id'):
             node_agents = get_agents_by_node(kwargs['agent_id'])
+
+        if kwargs.get('node_id'):
+            node_agents = get_dict_nodes(kwargs['node_id'])
+            del kwargs['node_id']
 
         return distributed_api_request(request_type=request_type, node_agents=node_agents, args=kwargs, limit=limit, offset=0)

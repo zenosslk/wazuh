@@ -7,24 +7,16 @@ from wazuh.cluster.management import send_request, read_config, check_cluster_st
 from wazuh.cluster import api_protocol_messages as api_protocol
 from wazuh.exception import WazuhException
 from wazuh import common
-import threading
-from sys import version
 import re
 import ast
 import json
 from datetime import datetime
 from operator import itemgetter
 from itertools import islice
-import multiprocessing as mp
+from multiprocessing import Pool
 
 import logging
 import time
-
-is_py2 = version[0] == '2'
-if is_py2:
-    from Queue import Queue as queue
-else:
-    from queue import Queue as queue
 
 
 def merge_results(node, result_node, request_type, final_result=None):
@@ -94,17 +86,22 @@ def merge_results(node, result_node, request_type, final_result=None):
     return final_result
 
 
-def send_request_to_node(host, config_cluster, header, data, result_queue):
+def send_request_to_node(host, config_cluster, header, data):
     header = "{0} {1}".format(header, 'a'*(common.cluster_protocol_plain_size - len(header + " ")))
     error, response = send_request(host=host, port=config_cluster["port"], key=config_cluster['key'],
                         data=header, file=data.encode())
     if error != 0 or ((isinstance(response, dict) and response.get('error') is not None and response['error'] != 0)):
-        result_queue.put({'node': host, 'reason': "{0} - {1}".format(error, response), 'error': 1})
+        return {'node': host, 'reason': "{0} - {1}".format(error, response), 'error': 1}
     else:
-        result_queue.put(response)
+        return response
+
+
+def send_request_pool(arguments):
+    return send_request_to_node(*arguments)
 
 
 def send_request_to_nodes(config_cluster, header, data, nodes):
+
     process = []
     result = {}
     result_node = {}
@@ -113,18 +110,10 @@ def send_request_to_nodes(config_cluster, header, data, nodes):
 
 
     start_2 = time.time()
-    for node in nodes:
-        logging.warning("Sending {0} request from {1} to {2} (Message: '{3}')".format(header, get_node()['node'], node, str(data[node])))
 
-        result_queue = mp.Queue()
-        p = mp.Process(target=send_request_to_node, args=(str(node), config_cluster, header, json.dumps(data[node]), result_queue))
-        p.start()
-        process.append(p)
-
-        result_nodes[node] = result_queue.get()
-
-    for p in process:
-        p.join()
+    p = Pool(len(nodes))
+    result_nodes = dict(zip(nodes, p.map(send_request_pool, ((node, config_cluster, header, json.dumps(data[node])) for node in nodes))))
+    p.close()
 
     end_2 = time.time()
     elapsed_time_2 = end_2 - start_2

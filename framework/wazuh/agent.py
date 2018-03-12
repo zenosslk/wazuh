@@ -920,14 +920,18 @@ class Agent:
     def get_agents_overview(status="all", os_platform="all", os_version="all", manager_host="all",
                             offset=0, limit=common.database_limit, sort=None, search=None, select=None,
                             version="all", agent_id="all"):
-        data = {'items':[], 'totalItems':0}
         if agent_id != "all":
+            data = {'items':[], 'totalItems':0}
             for i in range(0,len(agent_id),900):
                 local_data = Agent.local_get_agents_overview(status, os_platform, os_version, manager_host,
                                                        offset, limit, sort, search, select, version,
                                                        agent_id[i:i+900])
                 data['totalItems'] += local_data['totalItems']
                 data['items'].extend(local_data['items'])
+        else:
+            data = Agent.local_get_agents_overview(status, os_platform, os_version, manager_host, 
+                                                   offset, limit, sort, search, select, version, 
+                                                   agent_id)
         return data
 
 

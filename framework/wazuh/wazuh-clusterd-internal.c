@@ -421,8 +421,14 @@ int execute_db_command(char *response, sqlite3 *db, sqlite3_stmt **res) {
                         mterror(DB_TAG, "Overflow error copying response in local memory");
 
                 } else if (response_str) {
-                    if (snprintf(response, RESPONSE_SIZE, "%s", (char *)sqlite3_column_text(*res,0)) >= RESPONSE_SIZE)
+                    if (snprintf(local_response1, RESPONSE_SIZE, "%s", (char *)sqlite3_column_text(*res, 0)) >= RESPONSE_SIZE)
                         mterror(DB_TAG, "Overflow error copying response in memory");
+
+                    if (snprintf(local_response2, RESPONSE_SIZE, "%s", response) >= RESPONSE_SIZE)
+                        mterror(DB_TAG, "Overflow error copying response in local memory");
+
+                    if (snprintf(response, RESPONSE_SIZE, "%s %s", local_response2, local_response1) >= RESPONSE_SIZE)
+                        mterror(DB_TAG, "Overflow error copying response in local memory");
                 } else
                     strcpy(response, "Command OK");
             } while (step == SQLITE_ROW || step == SQLITE_OK);

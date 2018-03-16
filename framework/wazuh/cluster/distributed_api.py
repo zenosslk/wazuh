@@ -3,16 +3,16 @@
 # Created by Wazuh, Inc. <info@wazuh.com>.
 # This program is a free software; you can redistribute it and/or modify it under the terms of GPLv2
 
-from wazuh.cluster.management import send_request, read_config, check_cluster_status, get_node, get_nodes, get_status_json, get_name_from_ip, get_ip_from_name
+from wazuh.cluster.management import send_request, read_config, check_cluster_status, get_node, get_nodes, get_status_json, get_name_from_ip, get_ip_from_name, get_localhost_ips
 from wazuh.cluster import api_protocol_messages as api_protocol
 from wazuh.exception import WazuhException
 from wazuh import common
-import threading
 from sys import version
 import re
 import ast
 import json
 import logging
+from multiprocessing import Pool
 
 is_py2 = version[0] == '2'
 if is_py2:
@@ -86,14 +86,21 @@ def append_node_result_by_type(node, result_node, request_type, current_result=N
     return current_result
 
 
-def send_request_to_node(host, config_cluster, header, data, result_queue):
-    header = "{0} {1}".format(header, 'a'*(common.cluster_protocol_plain_size - len(header + " ")))
-    error, response = send_request(host=host, port=config_cluster["port"], key=config_cluster['key'],
-                        data=header, file=data.encode())
-    if error != 0 or ((isinstance(response, dict) and response.get('error') is not None and response['error'] != 0)):
-        result_queue.put({'node': host, 'reason': "{0} - {1}".format(error, response), 'error': 1})
+def send_request_to_node(host, config_cluster, header, data):
+    if host not in get_localhost_ips():
+        header = "{0} {1}".format(header, 'a'*(common.cluster_protocol_plain_size - len(header + " ")))
+        error, response = send_request(host=host, port=config_cluster["port"], key=config_cluster['key'],
+                            data=header, file=json.dumps(data).encode())
+        if error != 0 or ((isinstance(response, dict) and response.get('error') is not None and response['error'] != 0)):
+            return {'node': host, 'reason': "{0} - {1}".format(error, response), 'error': 1}
+        else:
+            return response
     else:
-        result_queue.put(response)
+        return {'error':0, 'data': api_protocol.all_list_requests[header.split(' ')[1]](**data['args'])}
+
+
+def send_request_pool(arguments):
+    return send_request_to_node(*arguments)
 
 
 def send_request_to_nodes(config_cluster, header, data, nodes, args):
@@ -101,27 +108,12 @@ def send_request_to_nodes(config_cluster, header, data, nodes, args):
     result = {}
     result_node = {}
     result_nodes = {}
-    result_queue = queue()
 
-    for node in nodes:
-        if node is not None:
-            logging.info("Sending {0} request from {1} to {2} (Message: '{3}')".format(header, get_node()['node'], node, str(data[node])))
-            t = threading.Thread(target=send_request_to_node, args=(str(node), config_cluster, header, json.dumps(data[node]), result_queue))
-            threads.append(t)
-            t.start()
-            result_node = result_queue.get()
-        else:
-            result_node['data'] = {}
-            result_node['data']['failed_ids'] = []
-            for id in data[node][api_protocol.protocol_messages['NODEAGENTS']]:
-                res= {}
-                res['id'] = id
-                res['error'] = {'message':"Agent does not exist",'code':1701}
-                result_node['data']['failed_ids'].append(res)
-        result_nodes[node] = result_node
-    for t in threads:
-        t.join()
-    for node, result_node in result_nodes.iteritems():
+    p = Pool(len(nodes))
+    result_nodes = dict(zip(nodes, p.map(send_request_pool, ((node, config_cluster, header, data[node]) for node in nodes))))
+    p.close()
+
+    for node, result_node in result_nodes.items():
         result = append_node_result_by_type(node=node, result_node=result_node, request_type=header, current_result=result)
     return result
 
@@ -156,7 +148,7 @@ def prepare_message(request_type, node_agents={}, args={}):
         nodes = list(map(lambda x: x['url'], get_nodes()['items']))
         node_agents = {node: [] for node in nodes}
 
-    if not request_type is api_protocol.protocol_messages['MASTER_FORW']:
+    if not request_type == api_protocol.protocol_messages['MASTER_FORW']:
         for node in node_agents.keys():
             data[node] = {}
             data[node][api_protocol.protocol_messages['NODEAGENTS']] = node_agents[node]

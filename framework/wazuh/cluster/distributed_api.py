@@ -3,7 +3,7 @@
 # Created by Wazuh, Inc. <info@wazuh.com>.
 # This program is a free software; you can redistribute it and/or modify it under the terms of GPLv2
 
-from wazuh.cluster.management import send_request, read_config, check_cluster_status, get_node, get_nodes, get_status_json, get_name_from_ip, get_ip_from_name
+from wazuh.cluster.management import send_request, read_config, check_cluster_status, get_node, get_nodes, get_status_json, get_name_from_ip, get_ip_from_name, get_localhost_ips
 from wazuh.cluster import api_protocol_messages as api_protocol
 from wazuh.exception import WazuhException
 from wazuh import common
@@ -13,9 +13,8 @@ import json
 from datetime import datetime
 from operator import itemgetter
 from itertools import islice
-from multiprocessing import Pool
-
 import logging
+from multiprocessing import Pool
 import time
 
 
@@ -47,16 +46,16 @@ def merge_results(node, result_node, request_type, final_result=None):
         end_2 = time.time()
         elapsed_time_2 = end_2 - start_2
 
-        final_result["Merging"]["{}".format(str(node))] = {}
-        final_result["Merging"]["{}".format(str(node))]["Agents received"] = len(result_node["data"]["items"])
-        final_result["Merging"]["{}".format(str(node))]["Time"] = elapsed_time_2
+        # final_result["Merging"]["{}".format(str(node))] = {}
+        # final_result["Merging"]["{}".format(str(node))]["Agents received"] = len(result_node["data"]["items"])
+        # final_result["Merging"]["{}".format(str(node))]["Time"] = elapsed_time_2
         return final_result
 
     else:
         # Add totalItems to final_result
         final_result["data"]["totalItems"] = final_result["data"]["totalItems"] + result_node["data"]["totalItems"]
-        final_result["data"][node] = result_node["data"]["Total_manager"]
-        final_result["data"]["{}-totalItems".format(str(node))] = result_node["data"]["totalItems"]
+        # final_result["data"][node] = result_node["data"]["Total_manager"]
+        # final_result["data"]["{}-totalItems".format(str(node))] = result_node["data"]["totalItems"]
 
     for remote_agent in result_node["data"]["items"]:
         if remote_agent['id'] in final_result["data"]["items"]:
@@ -78,22 +77,24 @@ def merge_results(node, result_node, request_type, final_result=None):
 
     end_2 = time.time()
     elapsed_time_2 = end_2 - start_2
-
-    final_result["Merging"]["{}".format(str(node))] = {}
-    final_result["Merging"]["{}".format(str(node))]["Time"] = elapsed_time_2
-    final_result["Merging"]["{}".format(str(node))]["Agents received"] = len(result_node["data"]["items"])
-
     return final_result
+
+    # final_result["Merging"]["{}".format(str(node))] = {}
+    # final_result["Merging"]["{}".format(str(node))]["Time"] = elapsed_time_2
+    # final_result["Merging"]["{}".format(str(node))]["Agents received"] = len(result_node["data"]["items"])
 
 
 def send_request_to_node(host, config_cluster, header, data):
-    header = "{0} {1}".format(header, 'a'*(common.cluster_protocol_plain_size - len(header + " ")))
-    error, response = send_request(host=host, port=config_cluster["port"], key=config_cluster['key'],
-                        data=header, file=data.encode())
-    if error != 0 or ((isinstance(response, dict) and response.get('error') is not None and response['error'] != 0)):
-        return {'node': host, 'reason': "{0} - {1}".format(error, response), 'error': 1}
+    if host not in get_localhost_ips():
+        header = "{0} {1}".format(header, 'a'*(common.cluster_protocol_plain_size - len(header + " ")))
+        error, response = send_request(host=host, port=config_cluster["port"], key=config_cluster['key'],
+                            data=header, file=json.dumps(data).encode())
+        if error != 0 or ((isinstance(response, dict) and response.get('error') is not None and response['error'] != 0)):
+            return {'node': host, 'reason': "{0} - {1}".format(error, response), 'error': 1}
+        else:
+            return response
     else:
-        return response
+        return {'error':0, 'data': api_protocol.all_list_requests[header.split(' ')[1]](**data['args'])}
 
 
 def send_request_pool(arguments):
@@ -108,28 +109,14 @@ def send_request_to_nodes(config_cluster, header, data, nodes):
     result_nodes = {}
     result = {}
 
-
-    start_2 = time.time()
-
     p = Pool(len(nodes))
-    result_nodes = dict(zip(nodes, p.map(send_request_pool, ((node, config_cluster, header, json.dumps(data[node])) for node in nodes))))
+    result_nodes = dict(zip(nodes, p.map(send_request_pool, ((node, config_cluster, header, data[node]) for node in nodes))))
     p.close()
+    p.join()
 
-    end_2 = time.time()
-    elapsed_time_2 = end_2 - start_2
-    result["Receiving elapsed-time"] = elapsed_time_2
-
-    result["Merging"] = {}
-    start_2 = time.time()
-    for node, result_node in result_nodes.iteritems():
-        #logging.warning("{} ---- {}".format(node, result_node))
+    for node, result_node in result_nodes.items():
         result = merge_results(node=node, result_node=result_node, request_type=header, final_result=result)
-    end_2 = time.time()
-    elapsed_time_2 = end_2 - start_2
-    result["Merging"]["Total time"] = elapsed_time_2
-    result["Merging"]["Final agents"] = len(result["data"]["items"])
-    del result["data"]
-
+    
     return result
 
 
@@ -163,7 +150,7 @@ def prepare_message(request_type, node_agents={}, args={}):
         nodes = list(map(lambda x: x['url'], get_nodes()['items']))
         node_agents = {node: [] for node in nodes}
 
-    if not request_type is api_protocol.protocol_messages['MASTER_FORW']:
+    if not request_type == api_protocol.protocol_messages['MASTER_FORW']:
         for node in node_agents.keys():
             data[node] = {}
             data[node][api_protocol.protocol_messages['NODEAGENTS']] = node_agents[node]
@@ -253,9 +240,9 @@ def distributed_api_request(request_type, node_agents={}, args={}, from_cluster=
 
     end = time.time()
     elapsed_time = end - start
-    result["Total elapsed-time"] = elapsed_time
+    # result["Total elapsed-time"] = elapsed_time
 
-    result["Managers limit"] = args['limit']
+    # result["Managers limit"] = args['limit']
 
     return result
 

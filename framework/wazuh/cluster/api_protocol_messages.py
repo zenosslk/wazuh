@@ -24,7 +24,7 @@ protocol_messages = {
     'zip'                   : 'zip',
     'node'                  : 'node',
     'ready'                 : 'ready',
-    'data'                  : 'data'
+    'finished'              : 'finished'
 }
 
 # API Messages

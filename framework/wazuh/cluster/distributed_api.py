@@ -98,7 +98,11 @@ def send_request_to_node(host, config_cluster, header, data):
 
 
 def send_request_pool(arguments):
-    return send_request_to_node(*arguments)
+    before = time.time()
+    res = send_request_to_node(*arguments)
+    after = time.time()
+    logging.debug("Time sending request to {}: {}".format(arguments[0], after - before))
+    return res
 
 
 def send_request_to_nodes(config_cluster, header, data, nodes):
@@ -109,10 +113,13 @@ def send_request_to_nodes(config_cluster, header, data, nodes):
     result_nodes = {}
     result = {}
 
+    before = time.time()
     p = Pool(len(nodes))
-    result_nodes = dict(zip(nodes, p.map(send_request_pool, ((node, config_cluster, header, data[node]) for node in nodes))))
+    result_nodes = dict(zip(nodes, p.map(send_request_pool, [(node, config_cluster, header, data[node]) for node in sorted(nodes, reverse=True)])))
     p.close()
     p.join()
+    after = time.time()
+    logging.debug("Time sending all requests: {}".format(after - before))
 
     for node, result_node in result_nodes.items():
         result = merge_results(node=node, result_node=result_node, request_type=header, final_result=result)

@@ -14,7 +14,7 @@ try:
     from os import devnull, seteuid, setgid, getpid, kill
     from multiprocessing import Process, Manager, Value
     from re import search
-    from time import sleep
+    from time import sleep, time
     from pwd import getpwnam
     from signal import signal, pause, SIGINT, SIGTERM, SIGUSR1
     import ctypes
@@ -175,6 +175,7 @@ class WazuhClusterHandler(asynchat.async_chat):
 
 
     def handle_write(self):
+        before = time.time()
         msg = self.f.encrypt(self.data) + '\n'
         i = 0
         msg_len = len(msg)
@@ -183,7 +184,8 @@ class WazuhClusterHandler(asynchat.async_chat):
             sent = self.send(msg[i:next_i])
             i += sent
 
-        logging.debug("SERVER: Sent {}/{} bytes to {}".format(i, msg_len, self.addr))
+        after = time.time()
+        logging.debug("SERVER: Sent {}/{} bytes to {} in {}".format(i, msg_len, self.addr, after - before))
         self.handle_close()
 
 

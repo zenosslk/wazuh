@@ -10,7 +10,7 @@ from wazuh.configuration import get_ossec_conf
 from wazuh import common
 from subprocess import check_output
 from datetime import datetime
-from time import sleep
+from time import sleep, time
 # from os import strerror
 from glob import glob
 from operator import eq
@@ -111,6 +111,7 @@ class WazuhClusterClient(asynchat.async_chat):
         self.close()
 
     def handle_write(self):
+        before = time()
         if self.file is not None:
             msg = self.f.encrypt(self.data.encode()) + self.f.encrypt(self.file) + '\n\t\t\n'
         else:
@@ -123,7 +124,8 @@ class WazuhClusterClient(asynchat.async_chat):
             sent = self.send(msg[i:next_i])
             i += sent
 
-        logging.debug("CLIENT: Sent {}/{} bytes to {}".format(i, msg_len, self.addr))
+        after = time()
+        logging.debug("CLIENT: Sent {}/{} bytes to {} in {}".format(i, msg_len, self.addr, after - before))
         self.can_read=True
         self.can_write=False
 

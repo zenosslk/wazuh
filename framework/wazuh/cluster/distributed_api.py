@@ -14,7 +14,7 @@ from datetime import datetime
 from operator import itemgetter
 from itertools import islice
 import logging
-from multiprocessing import Pool
+from multiprocessing import Process, Queue
 import time
 
 
@@ -84,25 +84,22 @@ def merge_results(node, result_node, request_type, final_result=None):
     # final_result["Merging"]["{}".format(str(node))]["Agents received"] = len(result_node["data"]["items"])
 
 
-def send_request_to_node(host, config_cluster, header, data):
+def send_request_to_node(host, config_cluster, header, data, result_queue):
+    before = time.time()
     if host not in get_localhost_ips():
         header = "{0} {1}".format(header, 'a'*(common.cluster_protocol_plain_size - len(header + " ")))
         error, response = send_request(host=host, port=config_cluster["port"], key=config_cluster['key'],
                             data=header, file=json.dumps(data).encode())
         if error != 0 or ((isinstance(response, dict) and response.get('error') is not None and response['error'] != 0)):
-            return {'node': host, 'reason': "{0} - {1}".format(error, response), 'error': 1}
+            result_queue.put({'node': host, 'reason': "{0} - {1}".format(error, response), 'error': 1})
         else:
-            return response
+            result_queue.put(response)
+
     else:
-        return {'error':0, 'data': api_protocol.all_list_requests[header.split(' ')[1]](**data['args'])}
-
-
-def send_request_pool(arguments):
-    before = time.time()
-    res = send_request_to_node(*arguments)
+        result_queue.put({'error':0, 'data': api_protocol.all_list_requests[header.split(' ')[1]](**data['args'])})
     after = time.time()
-    logging.debug("Time sending request to {}: {}".format(arguments[0], after - before))
-    return res
+    logging.debug("Time sending request to {}: {}".format(host, after - before))
+
 
 
 def send_request_to_nodes(config_cluster, header, data, nodes):
@@ -114,10 +111,16 @@ def send_request_to_nodes(config_cluster, header, data, nodes):
     result = {}
 
     before = time.time()
-    p = Pool(len(nodes))
-    result_nodes = dict(zip(nodes, p.map(send_request_pool, [(node, config_cluster, header, data[node]) for node in sorted(nodes, reverse=True)])))
-    p.close()
-    p.join()
+    for node in nodes:
+        result_queue = Queue()
+        p = Process(target=send_request_to_node, args=(str(node), config_cluster, header, data[node], result_queue))
+        p.start()
+        process.append(p)
+        result_nodes[node] = result_queue.get()
+
+    for p in process:
+        p.join()
+
     after = time.time()
     logging.debug("Time sending all requests: {}".format(after - before))
 

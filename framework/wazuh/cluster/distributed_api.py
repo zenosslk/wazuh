@@ -121,9 +121,12 @@ def send_request_to_nodes(config_cluster, header, data, nodes):
     after = time.time()
     logging.debug("Time sending all requests: {}".format(after - before))
 
+    before = time.time()
     for node, result_node in result_nodes.items():
         result = merge_results(node=node, result_node=result_node, request_type=header, final_result=result)
-    
+    after = time.time()
+    logging.debug("Time merge: {}".format(after - before))
+
     return result
 
 

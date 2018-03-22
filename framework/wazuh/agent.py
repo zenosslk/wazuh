@@ -27,6 +27,8 @@ import hashlib
 import re
 import fcntl
 from json import loads
+import json
+import sys
 
 import logging
 import time
@@ -917,14 +919,10 @@ class Agent:
 
         data['items'] = Agent.get_agents_dict(conn, min_select_fields, user_select_fields)
 
-
-        end2 = time.time()
-        elapsed_time2 = end2 - start2
-        logging.warning("Time to get values --> {}".format(elapsed_time2))
         end = time.time()
         elapsed_time = end - start
         logging.warning("Time to get all agents --> {}".format(elapsed_time))
-        logging.warning("Got {} agents".format(len(data['items'])))
+        logging.warning("Got {} agents - {} Bytes".format(len(data['items']), sys.getsizeof(data['items'])))
         data["Total_manager"] = elapsed_time
 
 

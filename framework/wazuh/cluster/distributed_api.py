@@ -14,8 +14,9 @@ from datetime import datetime
 from operator import itemgetter
 from itertools import islice
 import logging
-from multiprocessing import Process, Queue
+from multiprocessing import Process, Pipe
 import time
+import sys
 
 
 def merge_results(node, result_node, request_type, final_result=None):
@@ -84,27 +85,33 @@ def merge_results(node, result_node, request_type, final_result=None):
     # final_result["Merging"]["{}".format(str(node))]["Agents received"] = len(result_node["data"]["items"])
 
 
-def send_request_to_node(host, config_cluster, header, data, result_queue):
+def send_request_to_node(host, config_cluster, header, data, parent_conn):
     before = time.time()
+    total_agents = 0
+    total_agents_bytes = 0
     if host not in get_localhost_ips():
         header = "{0} {1}".format(header, 'a'*(common.cluster_protocol_plain_size - len(header + " ")))
         error, response = send_request(host=host, port=config_cluster["port"], key=config_cluster['key'],
                             data=header, file=json.dumps(data).encode())
         if error != 0 or ((isinstance(response, dict) and response.get('error') is not None and response['error'] != 0)):
-            result_queue.put({'node': host, 'reason': "{0} - {1}".format(error, response), 'error': 1})
+            parent_conn.send({'node': host, 'reason': "{0} - {1}".format(error, response), 'error': 1})
         else:
-            result_queue.put(response)
+            parent_conn.send(response)
+            total_agents = len(response["data"]["items"])
+            total_agents_bytes = sys.getsizeof(response["data"]["items"])
 
     else:
-        result_queue.put({'error':0, 'data': api_protocol.all_list_requests[header.split(' ')[1]](**data['args'])})
+        response = api_protocol.all_list_requests[header.split(' ')[1]](**data['args'])
+        parent_conn.send({'error':0, 'data': response})
+        total_agents = len(response["items"])
+        total_agents_bytes = sys.getsizeof(response["items"])
     after = time.time()
-    logging.debug("Time sending request to {}: {}".format(host, after - before))
-
+    logging.debug("Time sending request to {}: {}. Received {} bytes - Agents {}".format(host, after - before, total_agents_bytes, total_agents))
 
 
 def send_request_to_nodes(config_cluster, header, data, nodes):
 
-    process = []
+    process = {}
     result = {}
     result_node = {}
     result_nodes = {}
@@ -112,13 +119,15 @@ def send_request_to_nodes(config_cluster, header, data, nodes):
 
     before = time.time()
     for node in nodes:
-        result_queue = Queue()
-        p = Process(target=send_request_to_node, args=(str(node), config_cluster, header, data[node], result_queue))
+        parent_conn, child_conn = Pipe()
+        p = Process(target=send_request_to_node, args=(str(node), config_cluster, header, data[node], child_conn))
+        process[p] = parent_conn
         p.start()
-        process.append(p)
-        result_nodes[node] = result_queue.get()
 
-    for p in process:
+    for p in process.keys():
+        result_nodes[p] = process[p].recv()
+
+    for p in process.keys():
         p.join()
 
     after = time.time()
@@ -253,6 +262,7 @@ def distributed_api_request(request_type, node_agents={}, args={}, from_cluster=
 
     end = time.time()
     elapsed_time = end - start
+    logging.debug("Time TOTAL: {}".format(end - start))
     # result["Total elapsed-time"] = elapsed_time
 
     # result["Managers limit"] = args['limit']

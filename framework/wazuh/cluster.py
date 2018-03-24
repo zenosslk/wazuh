@@ -223,7 +223,7 @@ def check_cluster_config(config):
     if not re.compile("\d+[m|s]").match(config['interval']):
         raise WazuhException(3004, 'Invalid interval specification. Please, specify it with format <number>s or <number>m')
 
-    if len(config['nodes']) == 0:
+    if not config.get('nodes') or len(config['nodes']) == 0:
         raise WazuhException(3004, 'No nodes defined in cluster configuration.')
 
     invalid_elements = list(reservated_ips & set(config['nodes']))

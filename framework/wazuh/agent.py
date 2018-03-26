@@ -922,8 +922,7 @@ class Agent:
         end = time.time()
         elapsed_time = end - start
         logging.warning("Time to get all agents --> {}".format(elapsed_time))
-        logging.warning("Got {} agents - {} Bytes".format(len(data['items']), sys.getsizeof(data['items'])))
-        data["Total_manager"] = elapsed_time
+        logging.warning("Got {} agents - {} bytes".format(len(data['items']), len(json.dumps(data))))
 
 
         return data

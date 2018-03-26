@@ -21,6 +21,7 @@ import socket
 import asyncore
 import asynchat
 import logging
+import zlib
 
 # import the C accelerated API of ElementTree
 try:
@@ -107,7 +108,9 @@ class WazuhClusterClient(asynchat.async_chat):
 
     def found_terminator(self):
         logging.debug("Received {}".format(len(''.join(self.received_data))))
-        self.response = json.loads(self.f.decrypt(''.join(self.received_data)))
+        decompress = zlib.decompressobj(-15)
+        data = decompress.decompress(self.received_data)
+        self.response = json.loads(self.f.decrypt(''.join(data)))
         self.close()
 
     def handle_write(self):

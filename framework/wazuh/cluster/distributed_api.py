@@ -41,22 +41,16 @@ def merge_results(node, result_node, request_type, final_result=None):
             final_result["data"]["items"][remote_agent['id']] = remote_agent
 
         final_result["data"]["totalItems"] = result_node["data"]["totalItems"]
-        final_result["data"][node] = result_node["data"]["Total_manager"]
         final_result["data"]["{}-totalItems".format(str(node))] = result_node["data"]["totalItems"]
 
         end_2 = time.time()
         elapsed_time_2 = end_2 - start_2
 
-        # final_result["Merging"]["{}".format(str(node))] = {}
-        # final_result["Merging"]["{}".format(str(node))]["Agents received"] = len(result_node["data"]["items"])
-        # final_result["Merging"]["{}".format(str(node))]["Time"] = elapsed_time_2
         return final_result
 
     else:
         # Add totalItems to final_result
         final_result["data"]["totalItems"] = final_result["data"]["totalItems"] + result_node["data"]["totalItems"]
-        # final_result["data"][node] = result_node["data"]["Total_manager"]
-        # final_result["data"]["{}-totalItems".format(str(node))] = result_node["data"]["totalItems"]
 
     for remote_agent in result_node["data"]["items"]:
         if remote_agent['id'] in final_result["data"]["items"]:
@@ -80,10 +74,6 @@ def merge_results(node, result_node, request_type, final_result=None):
     elapsed_time_2 = end_2 - start_2
     return final_result
 
-    # final_result["Merging"]["{}".format(str(node))] = {}
-    # final_result["Merging"]["{}".format(str(node))]["Time"] = elapsed_time_2
-    # final_result["Merging"]["{}".format(str(node))]["Agents received"] = len(result_node["data"]["items"])
-
 
 def send_request_to_node(host, config_cluster, header, data, parent_conn):
     before = time.time()
@@ -98,13 +88,13 @@ def send_request_to_node(host, config_cluster, header, data, parent_conn):
         else:
             parent_conn.send(response)
             total_agents = len(response["data"]["items"])
-            total_agents_bytes = sys.getsizeof(response["data"]["items"])
+            total_agents_bytes = json.dumps(len(response["data"]["items"]))
 
     else:
         response = api_protocol.all_list_requests[header.split(' ')[1]](**data['args'])
         parent_conn.send({'error':0, 'data': response})
         total_agents = len(response["items"])
-        total_agents_bytes = sys.getsizeof(response["items"])
+        total_agents_bytes = len(json.dumps(response["items"]))
     after = time.time()
     logging.debug("Time sending request to {}: {}. Received {} bytes - Agents {}".format(host, after - before, total_agents_bytes, total_agents))
 

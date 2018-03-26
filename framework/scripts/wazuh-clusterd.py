@@ -20,6 +20,7 @@ try:
     import ctypes
     import ctypes.util
     from operator import or_
+    import zlib
 
     import argparse
     parser =argparse.ArgumentParser()
@@ -176,7 +177,15 @@ class WazuhClusterHandler(asynchat.async_chat):
 
     def handle_write(self):
         before = time.time()
-        msg = self.f.encrypt(self.data) + '\n'
+        logging.debug("Before encrypt size --> {}".format(len(self.data)))
+        msg_e = self.f.encrypt(self.data)
+        logging.debug("After encrypt size --> {}".format(len(msg_e)))
+
+        compress = zlib.compressobj(zlib.Z_DEFAULT_COMPRESSION, zlib.DEFLATED, -15)
+        msg = compress.compress(msg_e) + '\n'
+        msg += compress.flush()
+
+        logging.debug("After compress size --> {}".format(len(msg)))
         i = 0
         msg_len = len(msg)
         while i < msg_len:

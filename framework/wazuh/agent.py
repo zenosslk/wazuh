@@ -1708,12 +1708,17 @@ class Agent:
             if debug:
                 print("RESPONSE: {0}".format(data))
         s = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
-        if data.startswith('ok 0'):
-            s.sendto(("1:wazuh-upgrade:wazuh: Upgrade procedure on agent {0} ({1}): succeeded. New version: {2}".format(str(self.id).zfill(3), self.name, self.version)).encode(), common.ossec_path + "/queue/ossec/queue")
-            return "Agent upgraded successfully"
-        elif data.startswith('ok 2'):
-            s.sendto(("1:wazuh-upgrade:wazuh: Upgrade procedure on agent {0} ({1}): failed: restored to previous version".format(str(self.id).zfill(3), self.name)).encode(), common.ossec_path + "/queue/ossec/queue")
-            raise WazuhException(1716, "Agent restored to previous version")
+        if data.startswith('ok'):
+            err_no = data.split(' ')[1]
+            if err_no == '0':
+                s.sendto(("1:wazuh-upgrade:wazuh: Upgrade procedure on agent {0} ({1}): succeeded. New version: {2}".format(str(self.id).zfill(3), self.name, self.version)).encode(), common.ossec_path + "/queue/ossec/queue")
+                return "Agent upgraded successfully"
+            elif err_no == '2':
+                s.sendto(("1:wazuh-upgrade:wazuh: Upgrade procedure on agent {0} ({1}): failed: restored to previous version".format(str(self.id).zfill(3), self.name)).encode(), common.ossec_path + "/queue/ossec/queue")
+                raise WazuhException(1716, "Agent restored to previous version")
+            else:
+                s.sendto(("1:wazuh-upgrade:wazuh: Upgrade procedure on agent {0} ({1}): failed: error executing upgrade ({2})".format(str(self.id).zfill(3), self.name, err_no)).encode(), common.ossec_path + "/queue/ossec/queue")
+                raise WazuhException(1716, "Error executing upgrade")
         else:
             s.sendto(("1:wazuh-upgrade:wazuh: Upgrade procedure on agent {0} ({1}): lost: {2}".format(str(self.id).zfill(3), self.name, data.replace("err ",""))).encode(), common.ossec_path + "/queue/ossec/queue")
             raise WazuhException(1716, data.replace("err ",""))
@@ -2036,4 +2041,3 @@ class Agent:
                 }]
 
         return cluster_dict
-

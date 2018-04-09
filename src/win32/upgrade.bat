@@ -9,4 +9,8 @@ GOTO end
 SLEEP 5 2> NUL || ping -n 5 127.0.0.1 > NUL
 powershell -ExecutionPolicy ByPass -File upgrade\do_upgrade.ps1
 
+if %errorLevel% neq 0 (
+    echo %errorLevel% > upgrade\upgrade_result
+)
+
 :end

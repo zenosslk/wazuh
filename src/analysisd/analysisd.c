@@ -1051,7 +1051,7 @@ void OS_ReadMSG_analysisd(int m_queue)
 
                 break;
 
-            } while ((rulenode_pt = rulenode_pt->next) != NULL);
+            } while (((rulenode_pt = rulenode_pt->next) != NULL) && lf->alert);
 
             /* If configured to log all, do it */
             if (Config.logall)

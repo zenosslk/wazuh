@@ -19,6 +19,9 @@
 /* Compare the first common fields between sum strings */
 static int SumCompare(const char *s1, const char *s2);
 
+/* Syscheck mutex */
+static pthread_mutex_t syscheck_mutex = PTHREAD_MUTEX_INITIALIZER;
+
 /* Initialize the necessary information to process the syscheck information */
 void SyscheckInit()
 {
@@ -216,18 +219,21 @@ static int DB_Search(const char *f_name, char *c_sum, Eventinfo *lf)
     sk_sum_t oldsum;
     sk_sum_t newsum;
 
+    w_mutex_lock(&syscheck_mutex);
     /* Get db pointer */
     fp = DB_File(lf->location, &agent_id);
     if (!fp) {
         merror("Error handling integrity database.");
         sdb.db_err++;
         lf->data = NULL;
+        w_mutex_unlock(&syscheck_mutex);
         return (0);
     }
 
     /* Read the integrity file and search for a possible entry */
     if (fgetpos(fp, &sdb.init_pos) == -1) {
         merror("Error handling integrity database (fgetpos).");
+        w_mutex_unlock(&syscheck_mutex);
         return (0);
     }
 
@@ -282,6 +288,7 @@ static int DB_Search(const char *f_name, char *c_sum, Eventinfo *lf)
         /* Checksum match, we can just return and keep going */
         if (SumCompare(saved_sum, c_sum) == 0) {
             lf->data = NULL;
+            w_mutex_unlock(&syscheck_mutex);
             return (0);
         }
 
@@ -319,6 +326,7 @@ static int DB_Search(const char *f_name, char *c_sum, Eventinfo *lf)
 
                 default:
                     lf->data = NULL;
+                    w_mutex_unlock(&syscheck_mutex);
                     return (0);
                     break;
             }
@@ -328,6 +336,7 @@ static int DB_Search(const char *f_name, char *c_sum, Eventinfo *lf)
         /* Commenting the file entry and adding a new one later */
         if (fsetpos(fp, &sdb.init_pos)) {
             merror("Error handling integrity database (fsetpos).");
+            w_mutex_unlock(&syscheck_mutex);
             return (0);
         }
         fputc('#', fp);
@@ -347,6 +356,7 @@ static int DB_Search(const char *f_name, char *c_sum, Eventinfo *lf)
         case -1:
             merror("Couldn't decode syscheck sum from log.");
             lf->data = NULL;
+            w_mutex_unlock(&syscheck_mutex);
             return 0;
 
         case 0:
@@ -354,6 +364,7 @@ static int DB_Search(const char *f_name, char *c_sum, Eventinfo *lf)
             case -1:
                 merror("Couldn't decode syscheck sum from database.");
                 lf->data = NULL;
+                w_mutex_unlock(&syscheck_mutex);
                 return 0;
 
             case 0:
@@ -531,7 +542,7 @@ static int DB_Search(const char *f_name, char *c_sum, Eventinfo *lf)
 
         /* Set decoder */
         lf->decoder_info = sdb.syscheck_dec;
-
+        w_mutex_unlock(&syscheck_mutex);
         return (1);
 
     } /* Continue */
@@ -569,7 +580,7 @@ static int DB_Search(const char *f_name, char *c_sum, Eventinfo *lf)
                 /* Set decoder */
                 lf->decoder_info = sdb.syscheck_dec;
                 lf->data = NULL;
-
+                w_mutex_unlock(&syscheck_mutex);
                 return (1);
             }
 
@@ -581,6 +592,8 @@ static int DB_Search(const char *f_name, char *c_sum, Eventinfo *lf)
     }
 
     lf->data = NULL;
+
+    w_mutex_unlock(&syscheck_mutex);
     return (0);
 }
 

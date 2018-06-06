@@ -23,6 +23,7 @@ All notable changes to this project will be documented in this file.
 - Get network inventory natively. ([#546](https://github.com/wazuh/wazuh/pull/546))
 - Added an option in Analysisd to set input event offset for plugin decoders. ([#512](https://github.com/wazuh/wazuh/pull/512))
 - Allow decoders mix plugin and multiregex children. ([#602](https://github.com/wazuh/wazuh/pull/602))
+- Added scheduling options to CIS-CAT integration. ([#586](https://github.com/wazuh/wazuh/pull/586))
 
 ### Changed
 
@@ -35,6 +36,8 @@ All notable changes to this project will be documented in this file.
 - Increases the maximum size of XML parser to 20KB.
 - Extract CVE instead of RHSA codes into vulnerability-detector. ([#549](https://github.com/wazuh/wazuh/pull/549))
 - Merge external libraries into a unique shared library. ([#620](https://github.com/wazuh/wazuh/pull/620))
+- Store CIS-CAT results into Wazuh DB. ([#568](https://github.com/wazuh/wazuh/pull/568))
+- Add profile information to CIS-CAT reports. ([#658](https://github.com/wazuh/wazuh/pull/658))
 
 ### Fixed
 

@@ -12,9 +12,6 @@
 #include "eventinfo.h"
 #include "compiled_rules/compiled_rules.h"
 
-/* Global definition */
-RuleInfo *currently_rule;
-
 /* Change path for test rule */
 #ifdef TESTRULE
 #undef RULEPATH

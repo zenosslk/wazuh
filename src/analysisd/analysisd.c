@@ -165,6 +165,23 @@ static pthread_mutex_t hourly_syscheck_mutex = PTHREAD_MUTEX_INITIALIZER;
 /* Hourly firewall mutex */
 static pthread_mutex_t hourly_firewall_mutex = PTHREAD_MUTEX_INITIALIZER;
 
+/* Reported variables */
+static int reported_syscheck = 0;
+static int reported_syscollector = 0;
+static int reported_hostinfo = 0;
+static int reported_rootcheck = 0;
+static int reported_event = 0;
+
+/* Reported mutexes */
+static pthread_mutex_t reported_syscheck_mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t reported_syscollector_mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t reported_hostinfo_mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t reported_rootcheck_mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t reported_event_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+/* Stats */
+static RuleInfo *stats_rule = NULL;
+
 /* Print help statement */
 __attribute__((noreturn))
 static void help_analysisd(void)
@@ -628,12 +645,7 @@ __attribute__((noreturn))
 void OS_ReadMSG_analysisd(int m_queue)
 #endif
 {
-    Eventinfo *lf;
-
-    RuleInfo *stats_rule = NULL;
-
-    /* Null to global currently pointers */
-    currently_rule = NULL;
+    Eventinfo *lf = NULL;
 
     /* Initialize the logs */
     OS_InitLog();
@@ -756,7 +768,6 @@ void OS_ReadMSG_analysisd(int m_queue)
     Config.show_hidden_labels = getDefine_Int("analysisd", "show_hidden_labels", 0, 1);
 
     // Create input buffer and thread
-
     input_queue = queue_init(Config.queue_size);
     w_create_thread(ad_input_main, &m_queue);
 
@@ -767,36 +778,36 @@ void OS_ReadMSG_analysisd(int m_queue)
     }
 
     /* Init the writer queue */
-    writer_queue = queue_init(4096);
+    writer_queue = queue_init(getDefine_Int("analysisd", "writer_queue_size", 0, 220000));
 
     /* Init the cleanmsg input queue */
-    cleanmsg_queue_input = queue_init(4096);
+    cleanmsg_queue_input = queue_init(getDefine_Int("analysisd", "clean_queue_size", 0, 220000));
 
     /* Init the cleanmsg output queue */
-    cleanmsg_queue_output = queue_init(4096);
+    cleanmsg_queue_output = queue_init(getDefine_Int("analysisd", "clean_queue_size", 0, 220000));
 
     /* Init the decode syscheck queue input */
-    decode_queue_syscheck_input = queue_init(4096);
+    decode_queue_syscheck_input = queue_init(getDefine_Int("analysisd", "decoders_queue_size", 0, 220000));
 
     /* Init the decode syscollector queue input */
-    decode_queue_syscollector_input = queue_init(4096);
+    decode_queue_syscollector_input = queue_init(getDefine_Int("analysisd", "decoders_queue_size", 0, 220000));
 
     /* Init the decode rootcheck queue input */
-    decode_queue_rootcheck_input = queue_init(4096);
+    decode_queue_rootcheck_input = queue_init(getDefine_Int("analysisd", "decoders_queue_size", 0, 220000));
 
      /* Init the decode hostinfo queue input */
-    decode_queue_hostinfo_input = queue_init(4096);
+    decode_queue_hostinfo_input = queue_init(getDefine_Int("analysisd", "decoders_queue_size", 0, 220000));
 
     /* Init the decode event queue input */
-    decode_queue_event_input = queue_init(4096);
+    decode_queue_event_input = queue_init(getDefine_Int("analysisd", "decoders_queue_size", 0, 220000));
 
     /* Init the decode event queue output */
-    decode_queue_event_output = queue_init(8192);
+    decode_queue_event_output = queue_init(getDefine_Int("analysisd", "output_queue_size", 0, 220000));
 
-    int num_output_threads = 4;
+    int num_output_threads = getDefine_Int("analysisd", "threads", 1, 32);
     int i;
 
-    sleep(6);
+    sleep(10);
     /* Create writer thread */
     w_create_thread(w_writer_thread,NULL);
 
@@ -1448,12 +1459,9 @@ void * w_main_output_thread(__attribute__((unused)) void * args ){
 
     char * msg = NULL;
     int result;
-    Eventinfo *lf;
+    Eventinfo *lf = NULL;
     clean_msg *cleaned_msg = NULL;
     decode_event *decode_event_lf = NULL;
-    
-    /* Null to global currently pointers */
-    currently_rule = NULL;
 
     /* Daemon loop */
     while (1) {
@@ -1475,9 +1483,6 @@ void * w_main_output_thread(__attribute__((unused)) void * args ){
         
             /* Msg cleaned */
             DEBUG_MSG("%s: DEBUG: Msg cleanup: %s ", ARGV0, lf->log);
-
-            /* Current rule must be null in here */
-            currently_rule = NULL;
 
             /** Check the date/hour changes **/
 
@@ -1532,7 +1537,14 @@ void * w_main_output_thread(__attribute__((unused)) void * args ){
                 result = queue_push_ex(decode_queue_syscheck_input,decode_event_lf);
 
                 if(result < 0){
-                    mwarn("Could not decode syscheck event, queue is full");
+
+                    w_mutex_lock(&reported_syscheck_mutex);
+                    if(!reported_syscheck){
+                        reported_syscheck = 1;
+                        mwarn("Could not decode syscheck event, queue is full");
+                    }
+                    w_mutex_unlock(&reported_syscheck_mutex);
+                   
                     free(decode_event_lf);
                     w_free_event_info(lf);
                     continue;
@@ -1542,7 +1554,14 @@ void * w_main_output_thread(__attribute__((unused)) void * args ){
                 result = queue_push_ex(decode_queue_rootcheck_input,decode_event_lf);
 
                 if(result < 0){
-                    mwarn("Could not decode rootcheck event, queue is full");
+
+                    w_mutex_lock(&reported_rootcheck_mutex);
+                    if(!reported_rootcheck){
+                        reported_rootcheck = 0;
+                        mwarn("Could not decode rootcheck event, queue is full");
+                    }
+                    w_mutex_unlock(&reported_rootcheck_mutex);
+
                     free(decode_event_lf);
                     w_free_event_info(lf);
                     decode_event_lf = NULL;
@@ -1554,7 +1573,14 @@ void * w_main_output_thread(__attribute__((unused)) void * args ){
                 result = queue_push_ex(decode_queue_syscollector_input,decode_event_lf);
 
                 if(result < 0){
-                    mwarn("Could not decode syscollector event, queue is full");
+
+                    w_mutex_lock(&reported_syscollector_mutex);
+                    if(!reported_syscollector){
+                        reported_syscollector = 1;
+                        mwarn("Could not decode syscollector event, queue is full");
+                    }
+                    w_mutex_unlock(&reported_syscollector_mutex);
+
                     free(decode_event_lf);
                     w_free_event_info(lf);
                     decode_event_lf = NULL;
@@ -1565,7 +1591,14 @@ void * w_main_output_thread(__attribute__((unused)) void * args ){
                 result = queue_push_ex(decode_queue_hostinfo_input,decode_event_lf);
 
                 if(result < 0){
-                    mwarn("Could not decode hostinfo event, queue is full");
+
+                    w_mutex_lock(&reported_hostinfo_mutex);
+                    if(!reported_hostinfo){
+                        reported_hostinfo = 1;
+                        mwarn("Could not decode hostinfo event, queue is full");
+                    }
+                    w_mutex_unlock(&reported_hostinfo_mutex);
+
                     free(decode_event_lf);
                     w_free_event_info(lf);
                     decode_event_lf = NULL;
@@ -1577,7 +1610,14 @@ void * w_main_output_thread(__attribute__((unused)) void * args ){
                 result = queue_push_ex(decode_queue_event_input,decode_event_lf);
 
                 if(result < 0){
-                    mwarn("Could not decode event, queue is full");
+
+                    w_mutex_lock(&reported_event_mutex);
+                    if(!reported_event){
+                        reported_event = 1;
+                        mwarn("Could not push to input decode event, queue is full");
+                    }
+                    w_mutex_unlock(&reported_event_mutex);
+
                     free(decode_event_lf);
                     w_free_event_info(lf);
                     decode_event_lf = NULL;
@@ -1658,6 +1698,7 @@ void * w_cleanmsg_thread(__attribute__((unused)) void * args){
 
             if(result < 0){
                 free(clean_msg_lf->msg);
+                Free_Eventinfo(clean_msg_lf->lf);
                 free(clean_msg_lf);
             }
         }
@@ -1685,8 +1726,13 @@ void * w_decode_syscheck_thread(__attribute__((unused)) void * args){
 
                 if(result < 0)
                 {
+                    w_mutex_lock(&reported_syscheck_mutex);
+                    if(!reported_syscheck){
+                        reported_syscheck = 1;
+                        mwarn("Could not decode syscheck event. Queue is full");
+                    }
+                    w_mutex_unlock(&reported_syscheck_mutex);
                     free(decode_event_lf);
-                    mwarn("Could not decode syscheck event. Queue is full");
                 }
             }
         }    
@@ -1696,6 +1742,7 @@ void * w_decode_syscheck_thread(__attribute__((unused)) void * args){
 void * w_decode_syscollector_thread(__attribute__((unused)) void * args){
     decode_event *decode_event_lf = NULL;
     int result;
+    int reported_syscollector = 0;
 
     while(1){
 
@@ -1714,7 +1761,13 @@ void * w_decode_syscollector_thread(__attribute__((unused)) void * args){
                 if(result < 0)
                 {
                     free(decode_event_lf);
-                    mwarn("Could not decode syscollector event. Queue is full");
+
+                    w_mutex_lock(&reported_syscollector_mutex);
+                    if(!reported_syscollector){
+                        reported_syscollector = 1;
+                        mwarn("Could not decode syscollector event. Queue is full");
+                    }
+                    w_mutex_unlock(&reported_syscollector_mutex);
                 }
             }
         }    
@@ -1741,8 +1794,14 @@ void * w_decode_rootcheck_thread(__attribute__((unused)) void * args){
 
                 if(result < 0)
                 {
+                    w_mutex_lock(&reported_rootcheck_mutex);
+                    if(!reported_rootcheck){
+                        reported_rootcheck = 1;
+                        mwarn("Could not decode rootcheck event. Queue is full");
+                    }
+                    w_mutex_unlock(&reported_rootcheck_mutex);
                     free(decode_event_lf);
-                    mwarn("Could not decode rootcheck event. Queue is full");
+                  
                 }
             }
         }    
@@ -1769,8 +1828,14 @@ void * w_decode_hostinfo_thread(__attribute__((unused)) void * args){
 
                 if(result < 0)
                 {
+                    w_mutex_lock(&reported_hostinfo_mutex);
+                    if(!reported_hostinfo){
+                        reported_hostinfo = 1;
+                        mwarn("Could not decode hostinfo event. Queue is full");
+                    }
+                    w_mutex_unlock(&reported_hostinfo_mutex);
                     free(decode_event_lf);
-                    mwarn("Could not decode hostinfo event. Queue is full");
+                    
                 }
             }
         }    
@@ -1789,16 +1854,20 @@ void * w_decode_event_thread(__attribute__((unused)) void * args){
             
             DecodeEvent(decode_event_lf->lf);
             /* We don't process syscheck events further */
-          /*  w_free_event_info(decode_event_lf->lf);
-            free(decode_event_lf);*/
 
             // Push to the output queue
             result = queue_push_ex(decode_queue_event_output,decode_event_lf);
 
             if(result < 0)
             {
+                w_mutex_lock(&reported_event_mutex);
+                if(!reported_event){
+                    reported_event = 1;
+                    mwarn("Could not push output to decode event. Queue is full");
+                }
+                w_mutex_unlock(&reported_event_mutex);
+                w_free_event_info(decode_event_lf->lf);
                 free(decode_event_lf);
-                mwarn("Could not decode event. Queue is full");
             }
             
         }    
@@ -1858,16 +1927,15 @@ void * w_read_msg_thread(__attribute__((unused)) void * args){
 
 void * w_process_event_thread(__attribute__((unused)) void * args){
 
-    Eventinfo *lf;
+    Eventinfo *lf = NULL;
     decode_event *decode_event_out_lf = NULL;
-    currently_rule = NULL;
-    RuleInfo *stats_rule = NULL;
+    RuleInfo *currently_rule = NULL;
     int result;
 
     while(1){
 
         RuleNode *rulenode_pt;
-        
+
         /* Extract decoded event from the queue */
         if(decode_event_out_lf = queue_pop_ex(decode_queue_event_output), decode_event_out_lf) {
             lf = decode_event_out_lf->lf;

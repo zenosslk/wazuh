@@ -31,6 +31,8 @@ extern char __shost[512];
 
 extern OSDecoderInfo *NULL_Decoder;
 
+void w_get_queues_size();
+
 #define OSSEC_SERVER    "ossec-server"
 #define MAX_DECODER_ORDER_SIZE  1024
 

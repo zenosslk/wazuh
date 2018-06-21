@@ -51,7 +51,7 @@ OSHash *OSHash_Create()
     srandom((unsigned int)time(0));
     self->initial_seed = os_getprime((unsigned)os_random() % self->rows);
     self->constant = os_getprime((unsigned)os_random() % self->rows);
-
+    self->mutex = (pthread_rwlock_t)PTHREAD_RWLOCK_INITIALIZER;
     return (self);
 }
 
@@ -166,6 +166,18 @@ int OSHash_Update(OSHash *self, const char *key, void *data)
     return (0);
 }
 
+/** int OSHash_Update(OSHash *self, char *key, void *data)
+ * Returns 0 on error (not found).
+ * Returns 1 on successduplicated key (not added)
+ * Key must not be NULL.
+ */
+int OSHash_Update_ex(OSHash *self, const char *key, void *data)
+{
+    w_rwlock_wrlock(&self->mutex);
+    return OSHash_Update(self,key,data);
+    w_rwlock_unlock(&self->mutex);
+}
+
 /** int OSHash_Add(OSHash *self, char *key, void *data)
  * Returns 0 on error.
  * Returns 1 on duplicated key (not added)
@@ -223,6 +235,19 @@ int OSHash_Add(OSHash *self, const char *key, void *data)
     return (2);
 }
 
+/** int OSHash_Add(OSHash *self, char *key, void *data)
+ * Returns 0 on error.
+ * Returns 1 on duplicated key (not added)
+ * Returns 2 on success
+ * Key must not be NULL.
+ */
+int OSHash_Add_ex(OSHash *self, const char *key, void *data)
+{
+    w_rwlock_wrlock(&self->mutex);
+    return OSHash_Add(self,key,data);
+    w_rwlock_unlock(&self->mutex);
+}
+
 /** void *OSHash_Get(OSHash *self, char *key)
  * Returns NULL on error (key not found).
  * Returns the key otherwise.
@@ -257,6 +282,18 @@ void *OSHash_Get(const OSHash *self, const char *key)
     }
 
     return (NULL);
+}
+
+/** void *OSHash_Get(OSHash *self, char *key)
+ * Returns NULL on error (key not found).
+ * Returns the key otherwise.
+ * Key must not be NULL.
+ */
+void *OSHash_Get_ex(const OSHash *self, const char *key)
+{
+    w_rwlock_rdlock(&self->mutex);
+    return OSHash_Get(self,key);
+    w_rwlock_unlock(&self->mutex);
 }
 
 /* Return a pointer to a hash node if found, that hash node is removed from the table */
@@ -294,6 +331,14 @@ void *OSHash_Delete(OSHash *self, const char *key)
     return NULL;
 }
 
+/* Return a pointer to a hash node if found, that hash node is removed from the table */
+void *OSHash_Delete_ex(OSHash *self, const char *key)
+{
+    w_rwlock_wrlock(&self->mutex);
+    return OSHash_Delete(self,key);
+    w_rwlock_unlock(&self->mutex);
+}
+
 OSHash *OSHash_Duplicate(const OSHash *hash) {
     OSHash *self;
     unsigned int i;
@@ -318,4 +363,11 @@ OSHash *OSHash_Duplicate(const OSHash *hash) {
     }
 
     return self;
+}
+
+OSHash *OSHash_Duplicate_ex(const OSHash *hash) {
+
+    w_rwlock_wrlock(&hash->mutex);
+    return OSHash_Duplicate(hash);
+    w_rwlock_unlock(&hash->mutex);
 }

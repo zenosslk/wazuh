@@ -31,7 +31,7 @@ extern char __shost[512];
 
 extern OSDecoderInfo *NULL_Decoder;
 
-#define WM_SYS_LOGTAG ARGV0 ":syscollector" // Tag for log messages
+#define WM_ANALYSISD_LOGTAG ARGV0 "" // Tag for log messages
 
 typedef struct cpu_info {
     char *cpu_name;

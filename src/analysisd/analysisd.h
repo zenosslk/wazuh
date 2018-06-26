@@ -31,7 +31,16 @@ extern char __shost[512];
 
 extern OSDecoderInfo *NULL_Decoder;
 
+#define WM_SYS_LOGTAG ARGV0 ":syscollector" // Tag for log messages
+
+typedef struct cpu_info {
+    char *cpu_name;
+    int cpu_cores;
+    double cpu_MHz;
+} cpu_info;
+
 void w_get_queues_size();
+void w_get_initial_queues_size();
 
 #define OSSEC_SERVER    "ossec-server"
 #define MAX_DECODER_ORDER_SIZE  1024

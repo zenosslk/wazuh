@@ -632,7 +632,9 @@ int run_dbcheck() {
         }
     }
 
-    remove_local_diff();
+    if(syscheck.remove_old_diff){
+        remove_local_diff();
+    }
 
     /* Duplicate hash table to check for deleted files */
     syscheck.last_check = OSHash_Duplicate(syscheck.fp);
@@ -689,7 +691,9 @@ int create_db() {
         i++;
     } while (syscheck.dir[i] != NULL);
 
-    remove_local_diff();
+    if(syscheck.remove_old_diff){
+        remove_local_diff();
+    }
 
     /* Duplicate hash table to check for deleted files */
     syscheck.last_check = OSHash_Duplicate(syscheck.fp);

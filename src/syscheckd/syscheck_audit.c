@@ -39,6 +39,9 @@ static regex_t regexCompiled_path0;
 static regex_t regexCompiled_path1;
 pthread_mutex_t audit_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t audit_rules_mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t audit_started = PTHREAD_COND_INITIALIZER;
+volatile int audit_thread_active;
+volatile int audit_thread_error;
 
 // Convert audit relative paths into absolute paths
 char *clean_audit_path(char *cwd, char *path) {
@@ -607,8 +610,14 @@ void * audit_main(int * audit_sock) {
     buffer = malloc(BUF_SIZE * sizeof(char));
     os_malloc(BUF_SIZE, cache);
 
-    mdebug1("Reading events from Audit socket...");
+    w_mutex_lock(&audit_mutex);
     audit_thread_active = 1;
+    audit_thread_error = 0;
+    w_cond_signal(&audit_started);
+    w_mutex_unlock(&audit_mutex);
+
+    mdebug1("Reading events from Audit socket...");
+
 
     while (audit_thread_active) {
         FD_ZERO(&fdset);
@@ -699,6 +708,10 @@ void * audit_main(int * audit_sock) {
     }
 
     // Auditd is not runnig or socket closed.
+    w_mutex_lock(&audit_mutex);
+    audit_thread_error = 1;
+    w_cond_signal(&audit_started);
+    w_mutex_unlock(&audit_mutex);
     merror("Audit thread finished.");
     free(buffer);
     close(*audit_sock);

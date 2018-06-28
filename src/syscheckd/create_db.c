@@ -460,7 +460,13 @@ int create_db()
             realtime_adddir(syscheck.dir[i], 0);
         }
 #else
-        if ((syscheck.opts[i] & CHECK_WHODATA) && audit_thread_active) {
+        if (syscheck.opts[i] & CHECK_WHODATA) {
+            // Wait for Audit reader thread
+            w_mutex_lock(&audit_mutex);
+            while (!(audit_thread_active || audit_thread_error)) {
+                w_cond_wait(&audit_started, &audit_mutex);
+            }
+            w_mutex_unlock(&audit_mutex);
             // Insert Audit rule
             int retval;
             if (W_Vector_length(audit_added_rules) < syscheck.max_audit_entries) {

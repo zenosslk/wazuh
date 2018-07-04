@@ -105,6 +105,7 @@ typedef struct _Eventinfo {
     const char *previous;
     const wlabel_t *labels;
     u_int16_t decoder_syscheck_id;
+    int rootcheck_fts;
 } Eventinfo;
 
 /* Events List structure */

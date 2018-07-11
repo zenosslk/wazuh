@@ -57,7 +57,7 @@ void DecodeEvent(Eventinfo *lf);
 int DecodeSyscheck(Eventinfo *lf);
 int DecodeRootcheck(Eventinfo *lf);
 int DecodeHostinfo(Eventinfo *lf);
-int DecodeSyscollector(Eventinfo *lf);
+int DecodeSyscollector(Eventinfo *lf,int *socket);
 
 /* For stats */
 static void DumpLogstats(void);
@@ -1271,6 +1271,7 @@ RuleInfo *OS_CheckIfRuleMatch(Eventinfo *lf, RuleNode *curr_node)
                 return (NULL);
             }
             os_strdup(_line,_line_cpy); 
+            free(_line);
             queue_push_ex_block(writer_queue_log_fts,_line_cpy);
         } else {
             return (NULL);
@@ -1532,8 +1533,8 @@ void * ad_input_main(void * args) {
     char buffer[OS_MAXSTR + 1] = "";
     char * copy;
     char *msg;
-    int result;
-
+    int result;    
+    
     mdebug1("Input message handler thread started.");
 
     while (1) {
@@ -1830,6 +1831,7 @@ void * w_decode_syscheck_thread(__attribute__((unused)) void * args){
 void * w_decode_syscollector_thread(__attribute__((unused)) void * args){
     Eventinfo *lf = NULL;
     char *msg = NULL;
+    int socket = -1;
 
     while(1){
 
@@ -1855,7 +1857,7 @@ void * w_decode_syscollector_thread(__attribute__((unused)) void * args){
 
             /** Check the date/hour changes **/
 
-            if (!DecodeSyscollector(lf)) {
+            if (!DecodeSyscollector(lf,&socket)) {
                 /* We don't process syscheck events further */
                 w_free_event_info(lf);
             }

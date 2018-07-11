@@ -18,7 +18,7 @@
 char* Eventinfo_to_jsonstr(const Eventinfo* lf)
 {
     cJSON* root;
-    cJSON* rule;
+    cJSON* rule = NULL;
     cJSON* file_diff;
     cJSON* manager;
 	cJSON* agent;

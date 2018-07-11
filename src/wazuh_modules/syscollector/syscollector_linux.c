@@ -784,6 +784,7 @@ int sys_deb_packages(int queue_fd, const char* LOCATION){
     } else {
 
         mterror(WM_SYS_LOGTAG, "Unable to open the file '%s'", file);
+        free(timestamp);
         return -1;
 
     }

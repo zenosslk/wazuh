@@ -131,11 +131,11 @@ void *dispatch_buffer(__attribute__((unused)) void * arg){
     int wait_ms = 1000 / agt->events_persec;
 
     while(1){
-        pthread_mutex_lock(&mutex_lock);
+        w_mutex_lock(&mutex_lock);
 
         while(empty(i, j)){
             mdebug2("Agent buffer empty.");
-            pthread_cond_wait(&cond_no_empty, &mutex_lock);
+            w_cond_wait(&cond_no_empty, &mutex_lock);
         }
         /* Check if buffer usage reaches any lower level */
         switch (state) {
@@ -173,7 +173,7 @@ void *dispatch_buffer(__attribute__((unused)) void * arg){
 
         char * msg_output = buffer[j];
         forward(j, agt->buflength + 1);
-        pthread_mutex_unlock(&mutex_lock);
+        w_mutex_unlock(&mutex_lock);
 
         if (buff.warn){
 

@@ -907,8 +907,11 @@ int w_backup_file(File *file, const char *source) {
 	if(!fsource)
 	{
         merror(FOPEN_ERROR, source, errno, strerror(errno));
+        fclose(fsource);
 		return -1;
 	}
+
+    fclose(fsource);
 
     snprintf(template, OS_FLSIZE, "%s.backup", source);
     old_mask = umask(0177);

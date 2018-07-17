@@ -1302,7 +1302,9 @@ int Rules_OP_ReadRules(const char *rulefile)
 
                 /* Zero each entry */
                 for (; ii <= MAX_LAST_EVENTS; ii++) {
+                    w_mutex_lock(&config_ruleinfo->mutex);
                     config_ruleinfo->last_events[ii] = NULL;
+                    w_mutex_unlock(&config_ruleinfo->mutex);
                 }
             }
 

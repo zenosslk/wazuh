@@ -1716,6 +1716,10 @@ void w_free_event_info(Eventinfo *lf){
             lasts++;
         }
         free(last_event);
+
+        w_mutex_lock(&lf->generated_rule->mutex);
+        lf->generated_rule->last_events[0] = NULL;
+        w_mutex_unlock(&lf->generated_rule->mutex);
     }
 }
 
@@ -1737,19 +1741,7 @@ void * w_writer_thread(__attribute__((unused)) void * args ){
                 jsonout_output_archive(lf);
             }
                
-            /** Cleaning the memory **/
-
-            /* Only clear the memory if the eventinfo was not
-            * added to the stateful memory
-            * -- message is free inside clean event --
-            */
-            if (lf->generated_rule == NULL) {
-                Free_Eventinfo(lf);
-            } else if (lf->generated_rule->last_events) {
-                w_mutex_lock(&lf->generated_rule->mutex);
-                lf->generated_rule->last_events[0] = NULL;
-                w_mutex_unlock(&lf->generated_rule->mutex);
-            }
+            w_free_event_info(lf);
             w_mutex_unlock(&writer_threads_mutex);
         } else {
             free(lf->fields);
@@ -2349,7 +2341,7 @@ void * w_writer_log_statistical_thread(__attribute__((unused)) void * args ){
 
             w_mutex_unlock(&writer_threads_mutex);
 
-            w_free_event_info(lf);
+            Free_Eventinfo(lf);
         }
     }
 }
@@ -2367,7 +2359,7 @@ void * w_writer_log_firewall_thread(__attribute__((unused)) void * args ){
             FW_Log(lf);
             w_mutex_unlock(&writer_threads_mutex);
 
-            w_free_event_info(lf);
+            Free_Eventinfo(lf);
         }
     }
 }

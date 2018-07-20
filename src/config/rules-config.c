@@ -109,6 +109,7 @@ int Read_Rules(XML_NODE node, void *configp, __attribute__((unused)) void *mailp
     regex.prts_closure = NULL;
     regex.prts_str = NULL;
     regex.sub_strings = NULL;
+    regex.mutex = (pthread_mutex_t) PTHREAD_MUTEX_INITIALIZER;
 
     while (node[i]) {
         if (!node[i]->element) {

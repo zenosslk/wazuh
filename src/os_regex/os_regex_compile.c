@@ -12,6 +12,7 @@
 #include <stdlib.h>
 #include <ctype.h>
 
+#include <pthread.h>
 #include "os_regex.h"
 #include "os_regex_internal.h"
 
@@ -48,6 +49,7 @@ int OSRegex_Compile(const char *pattern, OSRegex *reg, int flags)
     reg->prts_closure = NULL;
     reg->prts_str = NULL;
     reg->sub_strings = NULL;
+    reg->mutex = (pthread_mutex_t) PTHREAD_MUTEX_INITIALIZER;
 
     /* The pattern can't be null */
     if (pattern == NULL) {

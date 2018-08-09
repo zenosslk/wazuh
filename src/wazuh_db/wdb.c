@@ -48,9 +48,9 @@ static const char * SQL_STMT[] = {
     "DELETE FROM sys_netaddr WHERE scan_id != ?;",
     "INSERT INTO ciscat_results (scan_id, scan_time, benchmark, profile, pass, fail, error, notchecked, unknown, score) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
     "DELETE FROM ciscat_results WHERE scan_id != ?;",
-    "SELECT 1 FROM pm_event WHERE log = ?;",
-    "UPDATE pm_event SET date_last = datetime(?, 'unixepoch', 'localtime') WHERE log = ?;",
-    "INSERT INTO pm_event (date_first, date_last, log, pci_dss, cis) VALUES (datetime(?, 'unixepoch', 'localtime'), datetime(?, 'unixepoch', 'localtime'), ?, ?, ?);"
+    "SELECT 1,outdated FROM pm_event WHERE log = ?;",
+    "UPDATE pm_event SET date_last = datetime(?, 'unixepoch', 'localtime'), outdated = 0 WHERE log = ?;",
+    "INSERT INTO pm_event (date_first, date_last, log, pci_dss, cis, outdated) VALUES (datetime(?, 'unixepoch', 'localtime'), datetime(?, 'unixepoch', 'localtime'), ?, ?, ?, 0);"
 };
 
 sqlite3 *wdb_global = NULL;

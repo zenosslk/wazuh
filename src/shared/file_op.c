@@ -2078,7 +2078,7 @@ int w_copy_file(const char *src, const char *dst,char mode) {
     else {
         fp_dst = fopen(dst, "w");
     }
-    
+
 
     if (!fp_dst) {
         merror("Couldn't open file '%s'", dst);
@@ -2218,7 +2218,11 @@ int w_ref_parent_folder(const char * path) {
 cJSON* getunameJSON()
 {
     os_info *read_info;
+    #ifndef WIN32
     static cJSON* root= NULL;
+    #else
+    cJSON * root;
+    #endif
     if(!root){
 
 #ifndef WIN32

@@ -6,6 +6,8 @@ All notable changes to this project will be documented in this file.
 ### Changed
 - Refactor Python framework code to standarize database requests and support API queries ([#921](https://github.com/wazuh/wazuh/pull/921)).
 - Add support for multigroups ([#1300](https://github.com/wazuh/wazuh/pull/1300) [#1135](https://github.com/wazuh/wazuh/pull/1135)).
+- Replaced the `execvpe` function by `execvp` for the Wazuh modules. ([#1207](https://github.com/wazuh/wazuh/pull/1207))
+- Avoid the use of reference ID in Syscollector network tables. ([#1315](https://github.com/wazuh/wazuh/pull/1315))
 - Add automatic labels ([#1004](https://github.com/wazuh/wazuh/pull/1340)).
 
 ## [v3.6.1]

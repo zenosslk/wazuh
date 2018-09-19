@@ -3,14 +3,30 @@ All notable changes to this project will be documented in this file.
 
 ## [v3.7.0]
 
+### Added
+
+- Now agents can belong to multiple groups. ([#1135](https://github.com/wazuh/wazuh/pull/1135))
+- Added support for API calls `GET/manager/stats/analysisd` and `GET/manager/stats/remoted`. ([#1297](https://github.com/wazuh/wazuh/pull/1297))
+- Added rule testing output when restarting manager. ([#1196](https://github.com/wazuh/wazuh/pull/1196))
+- Add automatic labels ([#1340](https://github.com/wazuh/wazuh/pull/1340)).
+
 ### Changed
-- Refactor Python framework code to standarize database requests and support API queries ([#921](https://github.com/wazuh/wazuh/pull/921)).
+
+- Refactor Python framework code to standardize database requests and support API queries. ([#921](https://github.com/wazuh/wazuh/pull/921)).
 - Add support for multigroups ([#1300](https://github.com/wazuh/wazuh/pull/1300) [#1135](https://github.com/wazuh/wazuh/pull/1135)).
 - Replaced the `execvpe` function by `execvp` for the Wazuh modules. ([#1207](https://github.com/wazuh/wazuh/pull/1207))
 - Avoid the use of reference ID in Syscollector network tables. ([#1315](https://github.com/wazuh/wazuh/pull/1315))
-- Add automatic labels ([#1004](https://github.com/wazuh/wazuh/pull/1340)).
 
-## [v3.6.1]
+### Fixed
+
+- Fixed mandatory configuration labels check ([#1208](https://github.com/wazuh/wazuh/pull/1208))
+- Fixed email_alerts configuration for multiple recipients ([#1193 ](https://github.com/wazuh/wazuh/pull/1193))
+- Fixed manager stopping when no command timeout is allowed ([#1194](https://github.com/wazuh/wazuh/pull/1194))
+
+## [v3.6.2]
+
+
+## [v3.6.1] 2018-09-07
 
 ### Fixed
 
@@ -26,25 +42,6 @@ All notable changes to this project will be documented in this file.
 - Fix bug in folder recursion limit count in FIM real-time mode. ([#1226](https://github.com/wazuh/wazuh/issues/1226))
 - Fixed errors when parsing AWS events in Elasticsearch. ([#1229](https://github.com/wazuh/wazuh/issues/1229))
 - Fix bug when launching osquery from Wazuh. ([#1230](https://github.com/wazuh/wazuh/issues/1230))
-
-
-## [v3.6.0] 2018-08-29
-
-### Added
-
-### Changed
-
-### Fixed
-
-- Fix segmentation fault when the agent version is empty in Vulnerability Detector. ([#1191](https://github.com/wazuh/wazuh/pull/1191))
-- Fix bug that removes file extensions in rootcheck. ([#1197](https://github.com/wazuh/wazuh/pull/1197))
-
-
-## [v3.6.0]
-
-### Added
-
-- Now agents can belong to multiple groups. ([#1135](https://github.com/wazuh/wazuh/pull/1135))
 
 
 ## [v3.6.0] - 2018-08-29
@@ -96,6 +93,7 @@ All notable changes to this project will be documented in this file.
 - Prevents some vulnerabilities from not being checked for Debian. ([#1166](https://github.com/wazuh/wazuh/pull/1166))
 - Fixed legacy configuration for `vulnerability-detector`. ([#1174](https://github.com/wazuh/wazuh/pull/1174))
 - Fix active-response scripts installation for Windows. ([#1182](https://github.com/wazuh/wazuh/pull/1182)).
+- Fixed `open-scap` deadlock when opening large files. ([#1206](https://github.com/wazuh/wazuh/pull/1206)). Thanks to @juergenc for detecting this issue.
 
 ### Removed
 
